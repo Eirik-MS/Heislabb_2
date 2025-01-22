@@ -1,6 +1,0 @@
-[submodule "src/NetworkDriver"]
-	path = src/NetworkDriver
-	url = git@github.com:TTK4145/Network-go.git
-[submodule "src/ElevatorDriver"]
-	path = src/ElevatorDriver
-	url = git@github.com:TTK4145/driver-go.git
