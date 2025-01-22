@@ -1,4 +1,3 @@
-workspace = { members = ["Module/Netowork_nod"] }
 [package]
 name = "ex2"
 version = "0.1.0"
