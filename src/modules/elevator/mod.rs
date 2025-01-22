@@ -8,7 +8,7 @@ use driver_rust::elevio::elev as e;
 use network_rust::udpnet;
 
 
-fn elevator_start() -> std::io::Result<()> {
+pub fn elevator_start() -> std::io::Result<()> {
     let elev_num_floors = 4;
     let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
     println!("Elevator started:\n{:#?}", elevator);
