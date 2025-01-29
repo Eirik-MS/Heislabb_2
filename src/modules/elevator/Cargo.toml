@@ -1,5 +1,5 @@
 [package]
-name = "Netowork_nod"
+name = "elevator"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 
 [lib]
-path = "Netowork_nod.rs"
+path = "elevator.rs"
