@@ -7,6 +7,21 @@ use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
 use network_rust::udpnet;
 
+enum Floor_dir {
+    DIR_DOWN = e::DIRN_DOWN: 
+    DIR_STOP = e::DIRN_STOP:
+    DIR_UP = e::DIRN_UP: 
+
+}
+
+pub struct Elevator_state {
+    current_floor: i16,
+    prev_floor: i16,
+    current_direction: Floor_dir,
+    prev_direction: Floor_dir,
+    emergency_stop: bool
+
+}
 
 pub fn elevator_start() -> std::io::Result<()> {
     let elev_num_floors = 4;
