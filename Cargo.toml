@@ -1,4 +1,4 @@
-workspace = { members = ["src/modules/Netowork_nod", "src/modules/elevator"] }
+#workspace = { members = ["src/modules/Netowork_nod", "src/modules/elevator"] }
 [package]
 name = "ex2"
 version = "0.1.0"
@@ -9,4 +9,8 @@ edition = "2021"
 [dependencies]
 network-rust = { git = "https://github.com/TTK4145/network-rust", tag = "v0.3.0" }
 driver-rust = { git = "https://github.com/TTK4145/driver-rust", tag = "v0.1.0" }
+
+elevator = {path = "./src/modules/elevator"}
+Netowork_nod = {path = "./src/modules/Netowork_nod"}
+
 crossbeam-channel = "0.5"

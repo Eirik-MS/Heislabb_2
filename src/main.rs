@@ -1,8 +1,6 @@
-mod modules;
 
 use std::thread;  // Import thread module
-use network_rust::udpnet;
-use modules::elevator;
+use elevator;
 
 fn main() -> std::io::Result<()> {
     thread::spawn(|| {
