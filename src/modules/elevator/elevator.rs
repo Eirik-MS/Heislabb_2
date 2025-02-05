@@ -6,16 +6,21 @@ use crossbeam_channel as cbc;
 use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
 use network_rust::udpnet;
+use lazy_static::lazy_static;
+use std::sync::Mutex;
 
 
-pub const DIRN_DOWN: u8 = u8::MAX;
-pub const DIRN_STOP: u8 = 0;
-pub const DIRN_UP: u8 = 1;
 
 enum FloorDir {
-    DIRECTION_DOWN = DIRN_DOWN as isize,
-    DIRECTION_STOP = DIRN_STOP as isize,
-    DIRECTION_UP = DIRN_UP as isize,
+    DOWN = e::DIRN_DOWN as isize,
+    STOP = e::DIRN_STOP as isize,
+    UP = e::DIRN_UP as isize,
+}
+
+enum ButtonType{
+    HALL_UP,
+    HALL_DOWN,
+    CAB
 }
 
 
@@ -28,8 +33,32 @@ pub struct Elevator_state {
 
 }
 
-pub fn elevator_start() -> std::io::Result<()> {
-    let elev_num_floors = 4;
+pub struct Order {
+    call: ButtonType,
+    floor: u8,
+}
+
+
+lazy_static! {
+    static ref ELEVATOR_STATE: Mutex<Elevator_state> = Mutex::new(Elevator_state {
+        current_floor: -1,
+        prev_floor: -1,
+        current_direction: FloorDir::DIRECTION_STOP,
+        prev_direction: FloorDir::DIRECTION_STOP,
+        emergency_stop: false,
+    });
+}
+
+let mut elevator_queue: Vec<Order> = Vec::new();
+
+pub fn elevator_start(elev_num_floors: u8) -> std::io::Result<()> {
+    //init states
+    elevator_state.current_floor =      -1;
+    elevator_state.prev_floor =         -1;
+    elevator_state.current_direction =  FloorDir::STOP;
+    elevator_state.prev_direction =     FloorDir::STOP;
+    elevator_state.emergency_stop =     false;
+
     let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
     println!("Elevator started:\n{:#?}", elevator);
 
@@ -77,19 +106,21 @@ pub fn elevator_start() -> std::io::Result<()> {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
+
             },
             recv(floor_sensor_rx) -> a => {
                 let floor = a.unwrap();
-                println!("Floor: {:#?}", floor);
-                dirn =
-                    if floor == 0 {
-                        e::DIRN_UP
-                    } else if floor == elev_num_floors-1 {
-                        e::DIRN_DOWN
-                    } else {
-                        dirn
-                    };
-                elevator.motor_direction(dirn);
+                
+                //Update state:
+                update_elevator_floor(floor);
+                for elements in order_queue{
+                    if elements.target_floor == floor{
+                        elevator.motor_direction(FloorDir::STOP);
+                        update_elevator_direction(FloorDir::STOP);
+                        //TODO: Remove from queue
+                    }
+                }
+                
             },
             recv(stop_button_rx) -> a => {
                 let stop = a.unwrap();
@@ -107,4 +138,14 @@ pub fn elevator_start() -> std::io::Result<()> {
             },
         }
     }
+}
+
+fn update_elevator_floor(floor: i8) -> std::io::Result<()> {
+    elevator_state.prev_floor =     elevator_state.current_floor;
+    elevator_state.current_floor =  floor;
+}
+
+fn update_elevator_direction(new_dir: FloorDir) -> std:io::Result<()> {
+    elevator_state.prev_direction =    elevator_state.current_direction;
+    elevator_state.current_direction = new_dir;
 }
