@@ -7,18 +7,23 @@ use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
 use network_rust::udpnet;
 
-enum Floor_dir {
-    DIR_DOWN = e::DIRN_DOWN: 
-    DIR_STOP = e::DIRN_STOP:
-    DIR_UP = e::DIRN_UP: 
 
+pub const DIRN_DOWN: u8 = u8::MAX;
+pub const DIRN_STOP: u8 = 0;
+pub const DIRN_UP: u8 = 1;
+
+enum FloorDir {
+    DIRECTION_DOWN = DIRN_DOWN as isize,
+    DIRECTION_STOP = DIRN_STOP as isize,
+    DIRECTION_UP = DIRN_UP as isize,
 }
+
 
 pub struct Elevator_state {
     current_floor: i16,
     prev_floor: i16,
-    current_direction: Floor_dir,
-    prev_direction: Floor_dir,
+    current_direction: FloorDir,
+    prev_direction: FloorDir,
     emergency_stop: bool
 
 }
