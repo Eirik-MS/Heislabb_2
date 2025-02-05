@@ -3,6 +3,8 @@ use std::borrow::Cow;
 
 fn main(){
 
+    println!("testing git");
+
     let socket:UdpSocket = UdpSocket::bind("0.0.0.0:30000").unwrap();
 
     println!("Server listening on {}", socket.local_addr().unwrap());
@@ -21,3 +23,5 @@ fn main(){
         socket.send_to(response.as_bytes(), source).unwrap();
     }
 }
+
+
