@@ -10,20 +10,6 @@ use lazy_static::lazy_static;
 use std::sync::Mutex;
 
 
-
-enum FloorDir {
-    DOWN = e::DIRN_DOWN as isize,
-    STOP = e::DIRN_STOP as isize,
-    UP = e::DIRN_UP as isize,
-}
-
-enum ButtonType{
-    HALL_UP,
-    HALL_DOWN,
-    CAB
-}
-
-
 pub struct Elevator_state {
     current_floor: i16,
     prev_floor: i16,
@@ -34,7 +20,7 @@ pub struct Elevator_state {
 }
 
 pub struct Order {
-    call: ButtonType,
+    call: u8,
     floor: u8,
 }
 
@@ -43,21 +29,25 @@ lazy_static! {
     static ref ELEVATOR_STATE: Mutex<Elevator_state> = Mutex::new(Elevator_state {
         current_floor: -1,
         prev_floor: -1,
-        current_direction: FloorDir::DIRECTION_STOP,
-        prev_direction: FloorDir::DIRECTION_STOP,
+        current_direction: e::DIRECTION_STOP,
+        prev_direction: e::DIRECTION_STOP,
         emergency_stop: false,
     });
 }
 
-let mut elevator_queue: Vec<Order> = Vec::new();
+lazy_static! {
+    static ref ELEVATOR_QUEUE: Mutex<Vec<Order>> = Mutex::new(Vec::new());
+}
+
 
 pub fn elevator_start(elev_num_floors: u8) -> std::io::Result<()> {
     //init states
-    elevator_state.current_floor =      -1;
-    elevator_state.prev_floor =         -1;
-    elevator_state.current_direction =  FloorDir::STOP;
-    elevator_state.prev_direction =     FloorDir::STOP;
-    elevator_state.emergency_stop =     false;
+    //elevator_state.current_floor =      -1;
+    //elevator_state.prev_floor =         -1;
+    //elevator_state.current_direction =  e::DIRECTION_STOP;
+    //elevator_state.prev_direction =     e::DIRECTION_STOP;
+    //elevator_state.emergency_stop =     false;
+
 
     let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
     println!("Elevator started:\n{:#?}", elevator);
@@ -98,25 +88,34 @@ pub fn elevator_start(elev_num_floors: u8) -> std::io::Result<()> {
     }
     use std::thread::*;
     use std::time::*;
-    
     use crossbeam_channel as cbc;
+
     loop {
         cbc::select! {
             recv(call_button_rx) -> a => {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
-                elevator.call_button_light(call_button.floor, call_button.call, true);
+                
+                let order = Order {
+                    call: call_button.call,
+                    floor: call_button.floor,
+                } 
+                let mut elev_queue = ELEVATOR_QUEUE.lock().unwrap();
+                elev_queue.push(order);
 
+                elevator.call_button_light(call_button.floor, call_button.call, true);
             },
             recv(floor_sensor_rx) -> a => {
                 let floor = a.unwrap();
                 
                 //Update state:
-                update_elevator_floor(floor);
-                for elements in order_queue{
+                update_elevator_floor(floor as i8);
+                
+                let mut elev_queue = ELEVATOR_QUEUE.lock().unwrap();
+                for elements in elev_queue{
                     if elements.target_floor == floor{
-                        elevator.motor_direction(FloorDir::STOP);
-                        update_elevator_direction(FloorDir::STOP);
+                        elevator.motor_direction(e::DIRECTION_STOP);
+                        update_elevator_direction(e::DIRECTION_STOP);
                         //TODO: Remove from queue
                     }
                 }
@@ -140,12 +139,16 @@ pub fn elevator_start(elev_num_floors: u8) -> std::io::Result<()> {
     }
 }
 
-fn update_elevator_floor(floor: i8) -> std::io::Result<()> {
+fn update_elevator_floor(floor: i8) -> () {
+    let mut elevator_state = ELEVATOR_STATE.lock().unwrap();
+
     elevator_state.prev_floor =     elevator_state.current_floor;
     elevator_state.current_floor =  floor;
 }
 
-fn update_elevator_direction(new_dir: FloorDir) -> std:io::Result<()> {
+fn update_elevator_direction(new_dir: u8) -> () {
+    let mut elevator_state = ELEVATOR_STATE.lock().unwrap();
+
     elevator_state.prev_direction =    elevator_state.current_direction;
     elevator_state.current_direction = new_dir;
 }
