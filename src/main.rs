@@ -2,7 +2,7 @@
 use std::thread;  // Import thread module
 use elevator;
 
-let num_of_floors = 4;
+const num_of_floors:u8 = 4;
 
 fn main() -> std::io::Result<()> {
     thread::spawn(|| {

@@ -1,6 +1,7 @@
 use std::thread::*;
 use std::time::*;
 
+use tokio::main
 use crossbeam_channel as cbc;
 
 use driver_rust::elevio;
@@ -11,12 +12,12 @@ use std::sync::Mutex;
 
 
 pub struct Elevator_state {
-    current_floor: i16,
-    prev_floor: i16,
-    current_direction: FloorDir,
-    prev_direction: FloorDir,
-    emergency_stop: bool
-
+    current_floor: i8,
+    prev_floor: i8,
+    current_direction: u8,
+    prev_direction: u8,
+    emergency_stop: bool,
+    door_state: Mutex
 }
 
 pub struct Order {
@@ -29,9 +30,10 @@ lazy_static! {
     static ref ELEVATOR_STATE: Mutex<Elevator_state> = Mutex::new(Elevator_state {
         current_floor: -1,
         prev_floor: -1,
-        current_direction: e::DIRECTION_STOP,
-        prev_direction: e::DIRECTION_STOP,
+        current_direction: e::DIRN_STOP,
+        prev_direction: e::DIRN_STOP,
         emergency_stop: false,
+        door_state: Mutex::new(0)
     });
 }
 
@@ -99,7 +101,7 @@ pub fn elevator_start(elev_num_floors: u8) -> std::io::Result<()> {
                 let order = Order {
                     call: call_button.call,
                     floor: call_button.floor,
-                } 
+                }; 
                 let mut elev_queue = ELEVATOR_QUEUE.lock().unwrap();
                 elev_queue.push(order);
 
@@ -112,10 +114,11 @@ pub fn elevator_start(elev_num_floors: u8) -> std::io::Result<()> {
                 update_elevator_floor(floor as i8);
                 
                 let mut elev_queue = ELEVATOR_QUEUE.lock().unwrap();
-                for elements in elev_queue{
-                    if elements.target_floor == floor{
-                        elevator.motor_direction(e::DIRECTION_STOP);
-                        update_elevator_direction(e::DIRECTION_STOP);
+                for (index, elements) in elev_queue.iter().enumerate(){
+                    if elements.floor == floor{
+                        elevator.motor_direction(e::DIRN_STOP);
+                        update_elevator_direction(e::DIRN_STOP);
+                        open_door();
                         //TODO: Remove from queue
                     }
                 }
@@ -140,15 +143,28 @@ pub fn elevator_start(elev_num_floors: u8) -> std::io::Result<()> {
 }
 
 fn update_elevator_floor(floor: i8) -> () {
+    //Lock is unlocked once elevator_state goes out of scope:
     let mut elevator_state = ELEVATOR_STATE.lock().unwrap();
 
     elevator_state.prev_floor =     elevator_state.current_floor;
     elevator_state.current_floor =  floor;
+
 }
 
 fn update_elevator_direction(new_dir: u8) -> () {
+    //Lock is unlocked once elevator_state goes out of scope:
     let mut elevator_state = ELEVATOR_STATE.lock().unwrap();
 
     elevator_state.prev_direction =    elevator_state.current_direction;
     elevator_state.current_direction = new_dir;
+}
+
+fn open_door() -> {
+    //Lock is unlocked once elevator_state goes out of scope:
+    let mut elevator_state = ELEVATOR_STATE.lock().unwrap();
+    elevator_state.door_state.lock();
+    thread::spawn(||{
+        sleep(100).await;
+        elevator_state.door_state.unlock();
+    });
 }
