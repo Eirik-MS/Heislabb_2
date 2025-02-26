@@ -1,7 +1,7 @@
 use std::thread::*;
 use std::time::*;
 
-use tokio::main
+use tokio::main;
 use crossbeam_channel as cbc;
 
 use driver_rust::elevio;
@@ -17,7 +17,7 @@ pub struct Elevator_state {
     current_direction: u8,
     prev_direction: u8,
     emergency_stop: bool,
-    door_state: Mutex
+    door_state: Mutex<u8>
 }
 
 pub struct Order {
@@ -118,7 +118,8 @@ pub fn elevator_start(elev_num_floors: u8) -> std::io::Result<()> {
                     if elements.floor == floor{
                         elevator.motor_direction(e::DIRN_STOP);
                         update_elevator_direction(e::DIRN_STOP);
-                        open_door();
+                        // Open door asynchronously without blocking other threads
+                        tokio::spawn(open_door());
                         //TODO: Remove from queue
                     }
                 }
@@ -152,19 +153,34 @@ fn update_elevator_floor(floor: i8) -> () {
 }
 
 fn update_elevator_direction(new_dir: u8) -> () {
-    //Lock is unlocked once elevator_state goes out of scope:
+    //Lock is unlocked once elevator    elevator_state.door_state =
+    //state goes out of scope:
     let mut elevator_state = ELEVATOR_STATE.lock().unwrap();
 
     elevator_state.prev_direction =    elevator_state.current_direction;
     elevator_state.current_direction = new_dir;
 }
 
-fn open_door() -> {
-    //Lock is unlocked once elevator_state goes out of scope:
-    let mut elevator_state = ELEVATOR_STATE.lock().unwrap();
-    elevator_state.door_state.lock();
-    thread::spawn(||{
-        sleep(100).await;
-        elevator_state.door_state.unlock();
-    });
+
+//When I wrote this code only God and I new what was going on, now only God knows
+
+async fn open_door() {
+    let state = ELEVATOR_STATE.clone(); 
+
+    {
+        // Acquire a WRITE lock to modify door state
+        let mut elevator_state = state.write().await;
+        elevator_state.door_state = 1;  // Mark door as open
+        println!("Door is open...");
+    } // Write lock is DROPPED here! Other threads can now read elevator state.
+
+    // Sleep while the lock is released, allowing other threads to read state
+    sleep(Duration::from_secs(4)).await;
+
+    {
+        // Acquire a WRITE lock again to modify door state
+        let mut elevator_state = state.write().await;
+        elevator_state.door_state = 0;  // Mark door as closed
+        println!("Door is closed...");
+    }
 }
