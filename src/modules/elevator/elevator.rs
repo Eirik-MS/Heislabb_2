@@ -20,11 +20,6 @@ pub struct Elevator_state {
     door_state: Mutex<u8>
 }
 
-pub struct Order {
-    call: u8,
-    floor: u8,
-}
-
 
 lazy_static! {
     static ref ELEVATOR_STATE: Mutex<Elevator_state> = Mutex::new(Elevator_state {
@@ -119,7 +114,8 @@ pub fn elevator_start(elev_num_floors: u8) -> std::io::Result<()> {
                         elevator.motor_direction(e::DIRN_STOP);
                         update_elevator_direction(e::DIRN_STOP);
                         // Open door asynchronously without blocking other threads
-                        tokio::spawn(open_door());
+                        let  elevator = elevator.clone();
+                        tokio::spawn(open_door(elevator));
                         //TODO: Remove from queue
                     }
                 }
@@ -164,23 +160,120 @@ fn update_elevator_direction(new_dir: u8) -> () {
 
 //When I wrote this code only God and I new what was going on, now only God knows
 
-async fn open_door() {
-    let state = ELEVATOR_STATE.clone(); 
+use lazy_static::lazy_static;
+use tokio::sync::RwLock;
+use std::sync::Arc;
+use tokio::time::{sleep, Duration};
 
-    {
-        // Acquire a WRITE lock to modify door state
-        let mut elevator_state = state.write().await;
-        elevator_state.door_state = 1;  // Mark door as open
-        println!("Door is open...");
-    } // Write lock is DROPPED here! Other threads can now read elevator state.
+struct ElevatorState {
+    current_floor: i32,
+    prev_floor: i32,
+    current_direction: e::Direction,
+    prev_direction: e::Direction,
+    emergency_stop: bool,
+    door_state: i32,
+}
 
-    // Sleep while the lock is released, allowing other threads to read state
-    sleep(Duration::from_secs(4)).await;
+pub struct Order {
+    call: u8,
+    floor: u8,
+}
 
-    {
-        // Acquire a WRITE lock again to modify door state
-        let mut elevator_state = state.write().await;
-        elevator_state.door_state = 0;  // Mark door as closed
-        println!("Door is closed...");
+struct ElevatorController {
+    elevator: Arc<e::Elevator>, // Elevator instance stored in a Mutex
+    state: RwLock<ElevatorState>,
+    queue: RwLock<Vec<Order>>, // Elevator queue
+}
+
+impl ElevatorController {
+    fn new(elev_num_floors: u8) -> std::io::Result<Arc<Self>>{
+        let controller = Arc::new(Self {
+            elevator: Arc::new(e::Elevator::init("localhost:15657", elev_num_floors)?),
+            state: RwLock::new(ElevatorState {
+                current_floor: -1,
+                prev_floor: -1,
+                current_direction: e::DIRN_STOP,
+                prev_direction: e::DIRN_STOP,
+                emergency_stop: false,
+                door_state: 0,
+            }),
+            queue: RwLock::new(Vec::<Order>::new()), // Initialize empty queue
+        });
+
+        println!("Elevator started:\n{:#?}", controller.elevator.clone());
+        let poll_period = Duration::from_millis(25);
+
+        // Spawn threads for polling elevator sensors
+
+        let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
+        {
+            let elevator = controller.elevator.as_ref().clone();
+            spawn(move || elevio::poll::call_buttons(elevator , call_button_tx, poll_period));
+        }
+
+        let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
+        {
+            let elevator = controller.elevator.as_ref().clone();
+            spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
+        }
+
+        let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
+        {
+            let elevator = controller.elevator.as_ref().clone();
+            use std::thread::*;
+            use std::time::*;
+
+            use crossbeam_channel as cbc;;
+            spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, poll_period));
+        }
+
+        let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>();
+        {
+            let elevator = controller.elevator.as_ref().clone();
+            spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
+        }
+
+        Ok(controller)
     }
+
+    async fn open_door(&self, elevator: &e::Elevator) {
+        {
+            let mut state = self.state.lock().await;
+            elevator.door_light(true);
+            state.door_state = 1;
+            println!("Door is open...");
+        }
+
+        sleep(Duration::from_secs(4)).await;
+
+        {
+            let mut state = self.state.lock().await;
+            elevator.door_light(false);
+            state.door_state = 0;
+            println!("Door is closed...");
+        }
+    }
+
+    async fn add_order(&self, order: Order) {
+        let mut queue = self.queue.lock().await;
+        queue.push(order);
+        println!("Order added to queue.");
+    }
+
+    async fn remove_order(&self, order: &Order) {
+        let mut queue = self.queue.lock().await;
+        if let Some(pos) = queue.iter().position(|x| x == order) {
+            queue.remove(pos);
+            println!("Order removed from queue.");
+        }
+    }
+
+    async fn get_queue(&self) -> Vec<Order> {
+        let queue = self.queue.lock().await;
+        queue.clone() // Returns a copy of the queue
+    }
+}
+
+lazy_static! {
+    static ref ELEVATOR_CONTROLLER: Arc<ElevatorController> = ElevatorController::new();
 }
