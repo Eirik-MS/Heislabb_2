@@ -1,169 +1,18 @@
+//When I wrote this code only God and I new what was going on, now only God knows
 use std::thread::*;
 use std::time::*;
+use std::sync::Mutex;
+use std::sync::Arc;
 
 use tokio::main;
+use tokio::time::{sleep, Duration};
+use tokio::sync::RwLock;
+
 use crossbeam_channel as cbc;
 
 use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
 use network_rust::udpnet;
-use lazy_static::lazy_static;
-use std::sync::Mutex;
-
-
-pub struct Elevator_state {
-    current_floor: i8,
-    prev_floor: i8,
-    current_direction: u8,
-    prev_direction: u8,
-    emergency_stop: bool,
-    door_state: Mutex<u8>
-}
-
-
-lazy_static! {
-    static ref ELEVATOR_STATE: Mutex<Elevator_state> = Mutex::new(Elevator_state {
-        current_floor: -1,
-        prev_floor: -1,
-        current_direction: e::DIRN_STOP,
-        prev_direction: e::DIRN_STOP,
-        emergency_stop: false,
-        door_state: Mutex::new(0)
-    });
-}
-
-lazy_static! {
-    static ref ELEVATOR_QUEUE: Mutex<Vec<Order>> = Mutex::new(Vec::new());
-}
-
-
-pub fn elevator_start(elev_num_floors: u8) -> std::io::Result<()> {
-    //init states
-    //elevator_state.current_floor =      -1;
-    //elevator_state.prev_floor =         -1;
-    //elevator_state.current_direction =  e::DIRECTION_STOP;
-    //elevator_state.prev_direction =     e::DIRECTION_STOP;
-    //elevator_state.emergency_stop =     false;
-
-
-    let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
-    println!("Elevator started:\n{:#?}", elevator);
-
-    let poll_period = Duration::from_millis(25);
-
-    let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, poll_period));
-    }
-
-    let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
-    }
-
-    let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
-    {
-        let elevator = elevator.clone();
-        use std::thread::*;
-        use std::time::*;
-        
-        use crossbeam_channel as cbc;;
-        spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, poll_period));
-    }
-
-    let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
-    }
-
-    let mut dirn = e::DIRN_DOWN;
-    if elevator.floor_sensor().is_none() {
-        elevator.motor_direction(dirn);
-    }
-    use std::thread::*;
-    use std::time::*;
-    use crossbeam_channel as cbc;
-
-    loop {
-        cbc::select! {
-            recv(call_button_rx) -> a => {
-                let call_button = a.unwrap();
-                println!("{:#?}", call_button);
-                
-                let order = Order {
-                    call: call_button.call,
-                    floor: call_button.floor,
-                }; 
-                let mut elev_queue = ELEVATOR_QUEUE.lock().unwrap();
-                elev_queue.push(order);
-
-                elevator.call_button_light(call_button.floor, call_button.call, true);
-            },
-            recv(floor_sensor_rx) -> a => {
-                let floor = a.unwrap();
-                
-                //Update state:
-                update_elevator_floor(floor as i8);
-                
-                let mut elev_queue = ELEVATOR_QUEUE.lock().unwrap();
-                for (index, elements) in elev_queue.iter().enumerate(){
-                    if elements.floor == floor{
-                        elevator.motor_direction(e::DIRN_STOP);
-                        update_elevator_direction(e::DIRN_STOP);
-                        // Open door asynchronously without blocking other threads
-                        let  elevator = elevator.clone();
-                        tokio::spawn(open_door(elevator));
-                        //TODO: Remove from queue
-                    }
-                }
-                
-            },
-            recv(stop_button_rx) -> a => {
-                let stop = a.unwrap();
-                println!("Stop button: {:#?}", stop);
-                for f in 0..elev_num_floors {
-                    for c in 0..3 {
-                        elevator.call_button_light(f, c, false);
-                    }
-                }
-            },
-            recv(obstruction_rx) -> a => {
-                let obstr = a.unwrap();
-                println!("Obstruction: {:#?}", obstr);
-                elevator.motor_direction(if obstr { e::DIRN_STOP } else { dirn });
-            },
-        }
-    }
-}
-
-fn update_elevator_floor(floor: i8) -> () {
-    //Lock is unlocked once elevator_state goes out of scope:
-    let mut elevator_state = ELEVATOR_STATE.lock().unwrap();
-
-    elevator_state.prev_floor =     elevator_state.current_floor;
-    elevator_state.current_floor =  floor;
-
-}
-
-fn update_elevator_direction(new_dir: u8) -> () {
-    //Lock is unlocked once elevator    elevator_state.door_state =
-    //state goes out of scope:
-    let mut elevator_state = ELEVATOR_STATE.lock().unwrap();
-
-    elevator_state.prev_direction =    elevator_state.current_direction;
-    elevator_state.current_direction = new_dir;
-}
-
-
-//When I wrote this code only God and I new what was going on, now only God knows
-
-use lazy_static::lazy_static;
-use tokio::sync::RwLock;
-use std::sync::Arc;
-use tokio::time::{sleep, Duration};
 
 struct ElevatorState {
     current_floor: i32,
@@ -183,10 +32,24 @@ struct ElevatorController {
     elevator: Arc<e::Elevator>, // Elevator instance stored in a Mutex
     state: RwLock<ElevatorState>,
     queue: RwLock<Vec<Order>>, // Elevator queue
+    call_btn_tx: cbc::Sender<elevio::poll::CallButton>,
+    call_btn_rx: cbc::Receiver<elevio::poll::CallButton>,
+    floor_sense_tx: cbc::Sender<u8>,
+    floor_sense_rx: cbc::Receiver<u8>,
+    stop_btn_tx: cbc::Sender<bool>,
+    stop_btn_rx: cbc::Receiver<bool>,
+    obstruction_btn_tx: cbc::Sender<bool>,
+    obstruction_btn_rx: cbc::Receiver<bool>,
+    poll_period: std::time::Duration, 
 }
 
 impl ElevatorController {
     fn new(elev_num_floors: u8) -> std::io::Result<Arc<Self>>{
+        let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
+        let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
+        let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
+        let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>(); 
+
         let controller = Arc::new(Self {
             elevator: Arc::new(e::Elevator::init("localhost:15657", elev_num_floors)?),
             state: RwLock::new(ElevatorState {
@@ -198,42 +61,95 @@ impl ElevatorController {
                 door_state: 0,
             }),
             queue: RwLock::new(Vec::<Order>::new()), // Initialize empty queue
+            call_btn_tx: call_button_tx,
+            call_btn_rx: call_button_rx,
+            floor_sense_tx: floor_sensor_tx,
+            floor_sense_rx: floor_sensor_rx,
+            stop_btn_tx: stop_button_tx,
+            stop_btn_rx: stop_button_rx,
+            obstruction_btn_tx: obstruction_tx,
+            obstruction_btn_rx: obstruction_rx,
+            poll_period: Duration::from_millis(25);
         });
 
         println!("Elevator started:\n{:#?}", controller.elevator.clone());
-        let poll_period = Duration::from_millis(25);
-
-        // Spawn threads for polling elevator sensors
-
-        let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
-        {
-            let elevator = controller.elevator.as_ref().clone();
-            spawn(move || elevio::poll::call_buttons(elevator , call_button_tx, poll_period));
-        }
-
-        let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
-        {
-            let elevator = controller.elevator.as_ref().clone();
-            spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
-        }
-
-        let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
-        {
-            let elevator = controller.elevator.as_ref().clone();
-            use std::thread::*;
-            use std::time::*;
-
-            use crossbeam_channel as cbc;;
-            spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, poll_period));
-        }
-
-        let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>();
-        {
-            let elevator = controller.elevator.as_ref().clone();
-            spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
-        }
-
+        
+        
         Ok(controller)
+    }
+
+    fn run(&self) {
+        {
+            let elevator = self.elevator.as_ref().clone();
+            let call_button_tx = self.call_btn_tx.clone();
+            spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, self.poll_period));
+        }
+        {
+            let elevator = self.elevator.as_ref().clone();
+            let floor_sensor_tx = self.floor_sense_tx.clone();
+            spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, self.poll_period));
+        }
+        {
+            let elevator = self.elevator.as_ref().clone();
+            let stop_button_tx = self.stop_btn_tx.clone();
+            spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, self.poll_period));
+        }
+        {
+            let elevator = self.elevator.as_ref().clone();
+            let obstruction_tx = self.obstruction_btn_tx.clone();
+            spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, self.poll_period));
+        }
+
+        loop {
+            cbc::select! {
+                recv(call_button_rx) -> a => {
+                    let call_button = a.unwrap();
+                    println!("{:#?}", call_button);
+                    
+                    let order = Order {
+                        call: call_button.call,
+                        floor: call_button.floor,
+                    }; 
+                    let mut elev_queue = ELEVATOR_QUEUE.lock().unwrap();
+                    elev_queue.push(order);
+    
+                    elevator.call_button_light(call_button.floor, call_button.call, true);
+                },
+                recv(floor_sensor_rx) -> a => {
+                    let floor = a.unwrap();
+                    
+                    //Update state:
+                    update_elevator_floor(floor as i8);
+                    
+                    let mut elev_queue = ELEVATOR_QUEUE.lock().unwrap();
+                    for (index, elements) in elev_queue.iter().enumerate(){
+                        if elements.floor == floor{
+                            elevator.motor_direction(e::DIRN_STOP);
+                            update_elevator_direction(e::DIRN_STOP);
+                            // Open door asynchronously without blocking other threads
+                            let  elevator = elevator.clone();
+                            tokio::spawn(open_door(elevator));
+                            //TODO: Remove from queue
+                        }
+                    }
+                    
+                },
+                recv(stop_button_rx) -> a => {
+                    let stop = a.unwrap();
+                    println!("Stop button: {:#?}", stop);
+                    for f in 0..elev_num_floors {
+                        for c in 0..3 {
+                            elevator.call_button_light(f, c, false);
+                        }
+                    }
+                },
+                recv(obstruction_rx) -> a => {
+                    let obstr = a.unwrap();
+                    println!("Obstruction: {:#?}", obstr);
+                    elevator.motor_direction(if obstr { e::DIRN_STOP } else { dirn });
+                },
+            }
+        }
     }
 
     async fn open_door(&self, elevator: &e::Elevator) {
@@ -254,22 +170,22 @@ impl ElevatorController {
         }
     }
 
-    async fn add_order(&self, order: Order) {
-        let mut queue = self.queue.lock().await;
+    fn add_order(&self, order: Order) {
+        let mut queue = self.queue.lock();
         queue.push(order);
         println!("Order added to queue.");
     }
 
-    async fn remove_order(&self, order: &Order) {
-        let mut queue = self.queue.lock().await;
+    fn remove_order(&self, order: &Order) {
+        let mut queue = self.queue.lock();
         if let Some(pos) = queue.iter().position(|x| x == order) {
             queue.remove(pos);
             println!("Order removed from queue.");
         }
     }
 
-    async fn get_queue(&self) -> Vec<Order> {
-        let queue = self.queue.lock().await;
+    fn get_queue(&self) -> Vec<Order> {
+        let queue = self.queue.lock();
         queue.clone() // Returns a copy of the queue
     }
 }
