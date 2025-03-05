@@ -1,7 +1,6 @@
 //When I wrote this code only God and I new what was going on, now only God knows
 use std::thread::*;
 use std::time::*;
-use std::sync::Mutex;
 use std::sync::Arc;
 
 use tokio::main;
@@ -12,7 +11,6 @@ use crossbeam_channel as cbc;
 
 use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
-use network_rust::udpnet;
 
 struct ElevatorState {
     current_floor: u8,
@@ -23,15 +21,17 @@ struct ElevatorState {
     door_state: u8,
 }
 
+#[derive(Clone)] // Add Clone trait
 pub struct Order {
-    call: u8,
-    floor: u8,
+    pub id: u32,
+    pub call: u8,
+    pub floor: u8,
 }
 
-struct ElevatorController {
+pub struct ElevatorController {
 
     //Elevator stored in an Arc for safe handling
-    elevator: Arc<e::Elevator>, 
+    elevator: e::Elevator, 
 
     //State and queue stored as RwLock allowing multiple reads, single write concurrently 
     state: RwLock<ElevatorState>,
@@ -51,17 +51,17 @@ struct ElevatorController {
 }
 
 impl ElevatorController {
-    fn new(elev_num_floors: u8) -> std::io::Result<Arc<Self>>{
+    pub fn new(elev_num_floors: u8) -> std::io::Result<Arc<Self>>{
         let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
         let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
         let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
         let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>(); 
 
         let controller = Arc::new(Self {
-            elevator: Arc::new(e::Elevator::init("localhost:15657", elev_num_floors)?),
+            elevator: e::Elevator::init("localhost:15657", elev_num_floors)?,
             state: RwLock::new(ElevatorState {
-                current_floor: -1,
-                prev_floor: -1,
+                current_floor: u8::MAX,
+                prev_floor: u8::MAX,
                 current_direction: e::DIRN_STOP,
                 prev_direction: e::DIRN_STOP,
                 emergency_stop: false,
@@ -77,7 +77,7 @@ impl ElevatorController {
             stop_btn_rx: stop_button_rx,
             obstruction_btn_tx: obstruction_tx,
             obstruction_btn_rx: obstruction_rx,
-            poll_period: Duration::from_millis(25);
+            poll_period: Duration::from_millis(25),
         });
 
         println!("Elevator started:\n{:#?}", controller.elevator.clone());
@@ -86,29 +86,31 @@ impl ElevatorController {
         Ok(controller)
     }
 
-    pub async fn run(&self) {
+    pub async fn run(self: Arc<Self>) {
+
+        let poll_period = self.poll_period.clone(); 
         {
-            let elevator = self.elevator.as_ref().clone();
+            let elevator = self.elevator.clone();
             let call_button_tx = self.call_btn_tx.clone();
-            spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, self.poll_period));
+            spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, poll_period));
         }
         {
-            let elevator = self.elevator.as_ref().clone();
+            let elevator = self.elevator.clone();
             let floor_sensor_tx = self.floor_sense_tx.clone();
-            spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, self.poll_period));
+            spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
         }
         {
-            let elevator = self.elevator.as_ref().clone();
+            let elevator = self.elevator.clone();
             let stop_button_tx = self.stop_btn_tx.clone();
-            spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, self.poll_period));
+            spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, poll_period));
         }
         {
-            let elevator = self.elevator.as_ref().clone();
+            let elevator = self.elevator.clone();
             let obstruction_tx = self.obstruction_btn_tx.clone();
-            spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, self.poll_period));
+            spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
         }
 
-        let dirn = e::DIRN_DOWN
+        let dirn = e::DIRN_DOWN;
 
         loop {
             cbc::select! {
@@ -117,54 +119,57 @@ impl ElevatorController {
                     println!("{:#?}", call_button);
                     
                     let order = Order {
+                        id: 0, 
                         call: call_button.call,
                         floor: call_button.floor,
                     }; 
                     let mut elev_queue = self.queue.write().await;
                     elev_queue.push(order);
     
-                    self.elevator.as_ref().call_button_light(call_button.floor, call_button.call, true);
+                    self.elevator.call_button_light(call_button.floor, call_button.call, true);
 
                 },
                 recv(self.floor_sense_rx) -> a => {
                     let floor = a.unwrap();
-                    //Update state:
                     let mut state = self.state.write().await;
-                    state.prev_floor = self.state.read().await.current_floor;
+                    state.prev_floor = state.current_floor;
                     state.current_floor = floor;
                     
-                    let mut elev_queue = self.queue.read().await;
-                    for (index, elements) in elev_queue.iter().enumerate(){
-                        if elements.floor == floor{
-                            self.elevator.as_ref().motor_direction(e::DIRN_STOP);
-                            state.prev_direction = state.current_direction;
-                            state.current_direction = e::DIRN_STOP;
-                            // Open door asynchronously without blocking other threads
-                            tokio::spawn(self.open_door());
-                            //TODO: Remove from queue
-                        }
+                    let should_stop = {
+                        let queue = self.queue.read().await;
+                        queue.iter().any(|order| order.floor == floor)
+                    };
+                
+                    if should_stop {
+                        self.elevator.motor_direction(e::DIRN_STOP);
+                        state.prev_direction = state.current_direction;
+                        state.current_direction = e::DIRN_STOP;
+                        
+                        let controller: Arc<ElevatorController> = Arc::clone(&self);
+                        tokio::spawn(async move {
+                            controller.open_door().await;
+                        });
                     }
-                    
                 },
                 recv(self.stop_btn_rx) -> a => {
                     let stop = a.unwrap();
                     println!("Stop button: {:#?}", stop);
                     for f in 0..self.num_of_floors {
                         for c in 0..3 {
-                            self.elevator.as_ref().call_button_light(f, c, false);
+                            self.elevator.call_button_light(f, c, false);
                         }
                     }
                 },
                 recv(self.obstruction_btn_rx) -> a => {
                     let obstr = a.unwrap();
                     println!("Obstruction: {:#?}", obstr);
-                    let state = self.state.write().await;
+                    let mut state = self.state.write().await;
                     if obstr {
                         state.emergency_stop = true;
-                        self.elevator.as_ref().motor_direction(e::DIRN_STOP);
+                        self.elevator.motor_direction(e::DIRN_STOP);
                     } else {
                         state.emergency_stop = false;
-                        self.elevator.as_ref().motor_direction(state.current_direction);
+                        self.elevator.motor_direction(state.current_direction);
                     }
                     
                 },
@@ -172,51 +177,45 @@ impl ElevatorController {
         }
     }
 
-    async fn open_door(&self) {
+    async fn open_door(self: Arc<Self>) {
         {
-            let call_button = a.unwrap();
-            println!("{:#?}", call_button);
-            
-            let order = Order {
-                call: call_button.call,
-                floor: call_button.floor,
-            }; 
-            let mut elev_queue = self.queue.write().await;
-            elev_queue.push(order);
-
-            self.elevator.as_ref().call_button_light(call_button.floor, call_button.call, true);
-            let mut door_state = self.state.write().await.door_state;
-            self.elevator.as_ref().door_light(true);
-            door_state = 1;
-            println!("Door is open...");
+            let mut state = self.state.write().await;
+            state.door_state = 1; // Open
         }
-
+        self.elevator.door_light(true);
         sleep(Duration::from_secs(4)).await;
-
+        self.elevator.door_light(false);
         {
-            let mut door_state = self.state.write().await.door_state;
-            self.elevator.as_ref().door_light(false);
-            door_state = 0;
-            println!("Door is closed...");
+            let mut state = self.state.write().await;
+            state.door_state = 0; // Closed
         }
     }
 
-    pub fn add_order(&self, order: Order) {
-        let mut queue = self.queue.write().unwrap();
+    pub async fn add_order(&self, order: Order) {
+        let mut queue = self.queue.write().await;
         queue.push(order);
         println!("Order added to queue.");
     }
 
-    pub fn remove_order(&self, order: &Order) {
-        let mut queue = self.queue.write().unwrap();
-        if let Some(pos) = queue.iter().position(|x| x == order) {
+    pub async fn remove_order(&self, order_id: u32) -> bool {
+        let pos = {
+            let queue = self.queue.read().await;
+            queue.iter().position(|order| order.id == order_id)
+        };
+    
+        if let Some(pos) = pos {
+            let mut queue = self.queue.write().await;
             queue.remove(pos);
-            println!("Order removed from queue.");
+            println!("Order with ID {} removed.", order_id);
+            true
+        } else {
+            println!("Order with ID {} not found.", order_id);
+            false
         }
     }
 
-    pub fn get_queue(&self) -> Vec<Order> {
-        let queue = self.queue.queue.write().unwrap();
+    pub async fn get_queue(&self) -> Vec<Order> {
+        let queue = self.queue.read().await;
         queue.clone() // Returns a copy of the queue
     }
 }
