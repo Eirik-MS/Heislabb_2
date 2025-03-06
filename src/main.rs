@@ -1,16 +1,25 @@
 
-use std::thread;  // Import thread module
-use elevator;
+//use std::sync::{Arc, Mutex};
+use std::thread;
+use tokio::runtime::Runtime;
+use elevator::ElevatorController;
 
-const num_of_floors:u8 = 4;
+const NUM_OF_FLOORS:u8 = 4;
+
 
 fn main() -> std::io::Result<()> {
-    thread::spawn(|| {
-        println!("hello");  // Correct usage of println!
-        
+    let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS)?; // Create controller
+
+    // Spawn a separate thread to run the elevator logic
+    thread::spawn(move || {
+        let runtime = Runtime::new().expect("Failed to create Tokio runtime");
+        runtime.block_on(elev_ctrl.run());
     });
-    
-    let handler = thread::spawn(||elevator::elevator_start(num_of_floors));
-    handler.join().unwrap();
-    Ok(())  // Ensure that the main function returns a Result
+
+
+    // Main thread waits for user input to stop the program
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).expect("Failed to read line");
+
+    Ok(())
 }
