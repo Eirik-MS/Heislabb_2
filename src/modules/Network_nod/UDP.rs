@@ -1,4 +1,5 @@
-use std::net::UdpSocket;
+use std::net::{UdpSocket, SocketAddrV4, Ipv4Addr};
+use serde::{Serialize, Deserialize};
 use std::collections::{VecDeque, HashMap};
 use std::str;
 
@@ -12,14 +13,14 @@ fn broadcastFind(){
     let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30000);
     let message = "FIND_PAIR";
 
-    socket.send_to(message.as_bytes(), broadcast_addr.into()).expect("Failed to broadcast message on port");
+    socket.send_to(message.as_bytes(), broadcast_addr).expect("Failed to broadcast message on port");
     println!("Broadcasted FIND_PAIR request.");
 }
 
 //====ServerEnd====//
 
 fn UDPpairing(){
-    let socket = UdpSocket::bind("0.0.0.0.30000").expect("Failed to bind socket");
+    let socket = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
 
     println!("UDP server listening on port 30000");
 
@@ -29,7 +30,7 @@ fn UDPpairing(){
     let mut buffer = [0; 1024];
 
     loop{
-        let(size, source) = socket.recv_from(&buffer).expect("Failed to receive data");
+        let(size, source) = socket.recv_from(&mut buffer).expect("Failed to receive data");
         let request = str::from_utf8(&buffer[..size]).expect("Invalid UTF-8 data");
 
         println!("Received '{}' from {}",request, source);
@@ -53,7 +54,7 @@ fn UDPpairing(){
                 socket.send_to(msg1.as_bytes(), pair).expect("Failed to send to pair");
                 socket.send_to(msg2.as_bytes(), src_str).expect("Failed to send to src");
 
-                println!("Paired {} with {}", src_str, pair);
+                //println!("Paired {} with {}", src_str, pair);
                 }
             }
             else{
@@ -67,7 +68,7 @@ fn UDPpairing(){
             if pairedClients.contains_key(&src_str){
                 if let Some(pair) = pairedClients.get(&src_str){
                     socket.send_to(pair.as_bytes(), src_str).expect("Failed to send pairing to src");
-                    println!("{} is paired with {}", src_str, pair);
+                    //println!("{} is paired with {}", src_str, pair);
                 }
             }
         }

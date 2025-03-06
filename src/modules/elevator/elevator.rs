@@ -160,7 +160,7 @@ impl ElevatorController {
                         if state.current_floor == 0 {
                             state.current_direction = e::DIRN_STOP;
                             self.elevator.motor_direction(e::DIRN_STOP);
-                        } else if state.current_floor == self.num_of_floors {
+                        } else if state.current_floor == self.num_of_floors - 1 {
                             state.current_direction = e::DIRN_STOP;
                             self.elevator.motor_direction(e::DIRN_STOP);
                         }
@@ -193,10 +193,12 @@ impl ElevatorController {
             if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
                 let order = self.queue.read().await[0].clone();
                 if order.floor == state.current_floor {
-                    self.elevator.call_button_light(order.floor, order.call, false);
-                    self.queue.write().await.remove(0);
-                    self.elevator.motor_direction(state.prev_direction);
-                    state.current_direction = state.prev_direction;
+                    let controller: Arc<ElevatorController> = Arc::clone(&self);
+                        tokio::spawn(async move {
+                            controller.open_door().await;
+                        });
+                    self.remove_order(order.id);
+                    ()
                 } else if order.floor > state.current_floor {
                     self.elevator.motor_direction(e::DIRN_UP);
                     state.current_direction = e::DIRN_UP;
