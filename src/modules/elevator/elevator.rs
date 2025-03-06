@@ -111,6 +111,13 @@ impl ElevatorController {
         }
 
         let dirn = e::DIRN_DOWN;
+        
+        {
+            let mut state = self.state.write().await;
+            state.current_direction = dirn;
+            self.elevator.motor_direction(dirn);
+            
+        }
 
         loop {
             cbc::select! {
@@ -149,6 +156,14 @@ impl ElevatorController {
                         tokio::spawn(async move {
                             controller.open_door().await;
                         });
+                    } else {
+                        if state.current_floor == 0 {
+                            state.current_direction = e::DIRN_STOP;
+                            self.elevator.motor_direction(e::DIRN_STOP);
+                        } else if state.current_floor == self.num_of_floors {
+                            state.current_direction = e::DIRN_STOP;
+                            self.elevator.motor_direction(e::DIRN_STOP);
+                        }
                     }
                 },
                 recv(self.stop_btn_rx) -> a => {
@@ -174,6 +189,27 @@ impl ElevatorController {
                     
                 },
             }
+            let mut state = self.state.write().await;
+            if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
+                let order = self.queue.read().await[0].clone();
+                if order.floor == state.current_floor {
+                    self.elevator.call_button_light(order.floor, order.call, false);
+                    self.queue.write().await.remove(0);
+                    self.elevator.motor_direction(state.prev_direction);
+                    state.current_direction = state.prev_direction;
+                } else if order.floor > state.current_floor {
+                    self.elevator.motor_direction(e::DIRN_UP);
+                    state.current_direction = e::DIRN_UP;
+                } else if order.floor < state.current_floor {
+                    self.elevator.motor_direction(e::DIRN_DOWN);
+                    state.current_direction = e::DIRN_DOWN;
+                }
+                
+            }
+
+            //Maybe only change motor direcion her by using the state 
+            //or the dirn variable
+            //self.elevator.motor_direction(dirn);
         }
     }
 
