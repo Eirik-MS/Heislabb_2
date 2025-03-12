@@ -1,4 +1,4 @@
-#workspace = { members = ["src/modules/Netowork_nod", "src/modules/elevator"] }
+#workspace = { members = ["src/modules/Netowork_nod", "src/modules/elevator", "./src/modules/decision"] }
 [package]
 name = "ex2"
 version = "0.1.0"
@@ -12,5 +12,6 @@ driver-rust = { git = "https://github.com/TTK4145/driver-rust", tag = "v0.1.0" }
 
 elevator = {path = "./src/modules/elevator"}
 Netowork_nod = {path = "./src/modules/Netowork_nod"}
+decision = {path = "./src/modules/decision"}
 
 crossbeam-channel = "0.5"
