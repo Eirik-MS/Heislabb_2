@@ -5,8 +5,23 @@ use std::process::{Command, Stdio};
 use std::io::Write;
 use serde::{Deserialize, Serialize};
 
+//use std::sync::{Arc, Mutex};
+use std::thread;
+use tokio::runtime::Runtime;
+use elevator::ElevatorController;
+use network_rust::udpnet;
 
-fn main() {
+const NUM_OF_FLOORS:u8 = 4;
+
+fn main() -> std::io::Result<()> {
+    let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS)?; // Create controller
+
+    // Spawn a separate thread to run the elevator logic
+    thread::spawn(move || {
+        let runtime = Runtime::new().expect("Failed to create Tokio runtime");
+        runtime.block_on(elev_ctrl.run());
+    });
+
     // Construct test JSON data
     let mut states = HashMap::new();
     states.insert(
