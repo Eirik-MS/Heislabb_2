@@ -1,9 +1,10 @@
-mod modules;
-mod modules::decision;
+
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::io::Write;
 use serde::{Deserialize, Serialize};
+
+use decision::ElevatorSystem;
 
 //use std::sync::{Arc, Mutex};
 use std::thread;
