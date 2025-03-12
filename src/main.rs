@@ -4,8 +4,6 @@ use std::sync::Arc;
 use std::thread;
 use tokio::time::{sleep, Duration};
 use elevator::ElevatorController;
-use elevator::Order;
-use network_rust::udpnet;
 
 const NUM_OF_FLOORS:u8 = 4;
 const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
