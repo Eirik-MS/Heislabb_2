@@ -34,7 +34,7 @@ pub struct ElevatorController {
     elevator: e::Elevator, 
 
     //State and queue stored as RwLock allowing multiple reads, single write concurrently 
-    state: RwLock<ElevatorState>,
+    state: Arc<RwLock<ElevatorState>>,
     queue: RwLock<Vec<Order>>, 
     num_of_floors: u8,
 
@@ -59,14 +59,14 @@ impl ElevatorController {
 
         let controller = Arc::new(Self {
             elevator: e::Elevator::init("localhost:15657", elev_num_floors)?,
-            state: RwLock::new(ElevatorState {
+            state: Arc::new(RwLock::new(ElevatorState {
                 current_floor: u8::MAX,
                 prev_floor: u8::MAX,
                 current_direction: e::DIRN_DOWN,
                 prev_direction: e::DIRN_STOP,
                 emergency_stop: false,
                 door_state: 0,
-            }),
+            })),
             queue: RwLock::new(Vec::<Order>::new()), // Initialize empty queue
             num_of_floors: elev_num_floors.clone(),
             call_btn_tx: call_button_tx,
@@ -105,12 +105,11 @@ impl ElevatorController {
             spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
         }
 
-        
         controller.elevator.motor_direction(controller.state.read().await.current_direction);
         Ok(controller)
     }
 
-    pub async fn step(self: Arc<Self>) {
+    pub async fn step(&self) {
         cbc::select! {
             recv(self.call_btn_rx) -> a => {
                 let call_button = a.unwrap();
@@ -142,10 +141,10 @@ impl ElevatorController {
                     state.prev_direction = state.current_direction;
                     state.current_direction = e::DIRN_STOP;
                     
-                    let controller: Arc<ElevatorController> = Arc::clone(&self);
-                    tokio::spawn(async move {
-                        controller.open_door().await;
-                    });
+                    let elevator_clone = self.elevator.clone();
+                    let state_clone = self.state.clone();
+                    ElevatorController::open_door(elevator_clone, state_clone).await;
+                    
                 } else {
                     if state.current_floor == 0 {
                         state.current_direction = e::DIRN_STOP;
@@ -183,10 +182,7 @@ impl ElevatorController {
         if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
             let order = self.queue.read().await[0].clone();
             if order.floor == state.current_floor {
-                let controller: Arc<ElevatorController> = Arc::clone(&self);
-                    tokio::spawn(async move {
-                        controller.open_door().await;
-                    });
+                //Open Door
                 self.remove_order(order.id);
                 ()
             } else if order.floor > state.current_floor {
@@ -204,18 +200,22 @@ impl ElevatorController {
     
     }
 
-    async fn open_door(self: Arc<Self>) {
-        {
-            let mut state = self.state.write().await;
-            state.door_state = 1; // Open
-        }
-        self.elevator.door_light(true);
-        sleep(Duration::from_secs(4)).await;
-        self.elevator.door_light(false);
-        {
-            let mut state = self.state.write().await;
-            state.door_state = 0; // Closed
-        }
+    async fn open_door(elevator: e::Elevator, state: Arc<RwLock<ElevatorState>>) {
+        tokio::spawn(async move {
+            {
+                let mut state_lock = state.write().await;
+                state_lock.door_state = 1; // Door open
+            }
+
+            elevator.door_light(true);
+            sleep(Duration::from_secs(4)).await;
+            elevator.door_light(false);
+
+            {
+                let mut state_lock = state.write().await;
+                state_lock.door_state = 0; // Door closed
+            }
+        });
     }
 
     pub async fn add_order(&self, order: Order) {
