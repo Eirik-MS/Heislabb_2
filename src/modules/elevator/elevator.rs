@@ -198,6 +198,7 @@ impl ElevatorController {
     
     }
 
+    //Just use a timer and send a message over a cbc channel
     async fn open_door(elevator: e::Elevator, state: Arc<RwLock<ElevatorState>>) {
         tokio::spawn(async move {
             {
