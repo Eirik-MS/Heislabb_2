@@ -5,32 +5,29 @@ use std::io::Write;
 use serde::{Deserialize, Serialize};
 
 use decision::ElevatorSystem;
-
+use decision::ElevatorState;
+use decision::Behaviour;
+use decision::Directions;
 //use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::runtime::Runtime;
-use elevator::ElevatorController;
-use network_rust::udpnet;
+// use elevator::ElevatorController;
+// use network_rust::udpnet;
 
 const NUM_OF_FLOORS:u8 = 4;
 
 fn main() -> std::io::Result<()> {
-    let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS)?; // Create controller
+    println!("starting main");
 
-    // Spawn a separate thread to run the elevator logic
-    thread::spawn(move || {
-        let runtime = Runtime::new().expect("Failed to create Tokio runtime");
-        runtime.block_on(elev_ctrl.run());
-    });
 
     // Construct test JSON data
     let mut states = HashMap::new();
     states.insert(
         "one".to_string(),
         ElevatorState {
-            behaviour: "moving".to_string(),
+            behaviour: Behaviour::moving,
             floor: 2,
-            direction: "up".to_string(),
+            direction: Directions::up,
             cabRequests: vec![false, false, true, true],
         },
     );
@@ -38,9 +35,9 @@ fn main() -> std::io::Result<()> {
     states.insert(
         "two".to_string(),
         ElevatorState {
-            behaviour: "idle".to_string(),
+            behaviour: Behaviour::idle,
             floor: 0,
-            direction: "stop".to_string(),
+            direction: Directions::stop,
             cabRequests: vec![false, false, false, false],
         },
     );
@@ -57,25 +54,26 @@ fn main() -> std::io::Result<()> {
 
     // Serialize JSON
     let input_json = serde_json::to_string_pretty(&system).expect("Failed to serialize");
+    let hra_output = Command::new("./src/modules/decision/hall_request_assigner")
+    .arg("--input")
+    .arg(&input_json)
+    .output()
+    .expect("Failed to execute hall_request_assigner");
 
-    // Run the executable
-    let mut child = Command::new("./hall_request_assigner")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Failed to start process");
 
-    // Write JSON to stdin
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(input_json.as_bytes()).expect("Failed to write to stdin");
+
+    let hra_output_str; // Declare it outside to ensure visibility
+
+    if hra_output.status.success() {
+        // Fetch and deserialize output
+        hra_output_str = String::from_utf8(hra_output.stdout).expect("Invalid UTF-8 hra_output");
+        let hra_output = serde_json::from_str::<HashMap<String, Vec<Vec<bool>>>>(&hra_output_str)
+            .expect("Failed to deserialize hra_output");
+    } else {
+        hra_output_str = "Error: Execution failed".to_string();
     }
-
-    // Read and parse output JSON
-    let output = child.wait_with_output().expect("Failed to read stdout");
-    let output_json = String::from_utf8(output.stdout).expect("Failed to convert output to string");
-
-    // Deserialize response
-    let response: serde_json::Value = serde_json::from_str(&output_json).expect("Invalid JSON output");
     
-    println!("Response from executable: {}", response);
+    println!("Response from executable: {}", hra_output_str);
+        
+    Ok(()) 
 }
