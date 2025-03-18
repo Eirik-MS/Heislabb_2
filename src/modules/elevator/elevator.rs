@@ -45,6 +45,8 @@ pub struct ElevatorController {
     stop_btn_rx: cbc::Receiver<bool>,
     obstruction_btn_tx: cbc::Sender<bool>,
     obstruction_btn_rx: cbc::Receiver<bool>,
+    door_closing_tx: cbc::Sender<bool>,
+    door_closing_rx: cbc::Receiver<bool>,
     poll_period: std::time::Duration, 
 }
 
@@ -54,6 +56,7 @@ impl ElevatorController {
         let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
         let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
         let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>(); 
+        let (door_closing_tx, door_closing_rx) = cbc::unbounded::<bool>();
 
         let controller = Arc::new(Self {
             elevator: e::Elevator::init("localhost:15657", elev_num_floors)?,
@@ -75,6 +78,8 @@ impl ElevatorController {
             stop_btn_rx: stop_button_rx,
             obstruction_btn_tx: obstruction_tx,
             obstruction_btn_rx: obstruction_rx,
+            door_closing_tx: door_closing_tx,
+            door_closing_rx: door_closing_rx,
             poll_period: Duration::from_millis(25),
         });
         let poll_period = controller.poll_period.clone();
@@ -199,7 +204,7 @@ impl ElevatorController {
     }
 
     //Just use a timer and send a message over a cbc channel
-    async fn open_door(elevator: e::Elevator, state: Arc<RwLock<ElevatorState>>) {
+    async fn open_door(door_closing_tx: cbc::Sender<bool>) {
         tokio::spawn(async move {
             {
                 let mut state_lock = state.write().await;
