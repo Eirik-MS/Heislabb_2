@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use std::sync::Arc;
 use elevator::Order;
-use crate::elevator::{ElevatorState, Order}; //should map to my structs here?
+//use crate::elevator::{ElevatorState, Order}; //should map to my structs here?
 use crossbeam_channel as cbc; //for message passing
 use serde::Deserialize;
 use serde::Serialize;
@@ -20,7 +20,8 @@ const MAX_FLOORS: usize = 4;
 // taking over them, if elev dies, cab orders die too... 
 // TODO: maybe we need backup?
 
-// TODO change cbc to mpsc from tokio
+// TODO 1: change cbc to mpsc from tokio
+// TODO 2: tokio OneShot for state communication between me and elevator
 
 //******************** LOCAL STRUCTS ********************//
 #[derive(Serialize, Deserialize, Debug, Clone)] 
@@ -162,8 +163,13 @@ impl decision {
         
         let elevator_system = ElevatorSystem {
             hallRequests: hall_requests,
-            states: broadcast.states.clone(), //TODO filter out dead states
+            states: broadcast.states
+            .iter()
+            .filter(|(_, state)| !state.dead) // exclude dead ones so we get their orders but not them
+            .map(|(id, state)| (id.clone(), state.clone()))
+            .collect(),
         };
+
         println!("{:?}", elevator_system); //for debuggin
 
         //2. use hall order assigner
@@ -198,7 +204,7 @@ impl decision {
             for (floor, buttons) in floors.iter().enumerate() {
                 let existing_orders = broadcast
                     .hallRequests
-                    .get(elev_id)
+                    .(<String>)get(elev_id)
                     .unwrap_or(&Vec::new())
                     .iter()
                     .filter(|o| o.floor == floor as u8) 
