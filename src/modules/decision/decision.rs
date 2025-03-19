@@ -20,6 +20,8 @@ const MAX_FLOORS: usize = 4;
 // taking over them, if elev dies, cab orders die too... 
 // TODO: maybe we need backup?
 
+// TODO change cbc to mpsc from tokio
+
 //******************** LOCAL STRUCTS ********************//
 #[derive(Serialize, Deserialize, Debug, Clone)] 
 pub struct ElevatorSystem { //very local, basically only for order assigner executable
@@ -33,7 +35,9 @@ pub struct ElevatorState { //if I receive smthing different should map it to thi
     pub direction: Directions, //  < "up" | "down" | "stop" >
     pub cabRequests: Vec<bool>, // [false,false,false,false] LOCAL
     #[serde(skip)]
-    pub last_seen: Option<Instant>, //for the timeout
+    pub last_seen: Option<Instant>, //for the timeout, more than 5 secs?
+    #[serde(skip)]
+    pub dead: bool, //
 }
 
 //************ GLOBAL STRUCT ****************************//
@@ -61,7 +65,7 @@ pub enum OrderStatus { //like a counter, only goes in one direction!
     norder, //false, default state, could be assigned by executable
     initiated, //true - accept (up or down was pressed), added when button is pressed
     assigned, //true - reject, by executable
-    completed //for deletion, needs to be acknowledged by Id1, Id2, Id2... TODO-> add extra logic
+    completed //for deletion, needs to be acknowledged by (not dead) Id1, Id2, Id2... TODO-> add extra logic
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct HallOrder {
@@ -81,22 +85,23 @@ pub struct decision {
     network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
     //OTEHRS/UNSURE
     new_elev_state_rx: cbc::Receiver<ElevatorState>, //state to modify
-    new_elev_state_tx: cbc::Receiver<ElevatorState>, //when updated send back to fsm
+  //  new_elev_state_tx: cbc::Receiver<ElevatorState>, //when updated send back to fsm
     order_completed_rx: cbc::Receiver<bool>, //trigger for order state transition
     new_order_rx: cbc::Receiver<Order> //should be mapped to cab or hall orders (has id, call, floor), needs DIR
+    //TODO: cab and hall orders sent to elevator
 }
 
 impl decision {
     pub fn new(
         local_id: String,
-        local_state: Arc<RwLock<ElevatorState>>, //multiple tasks might be accesing it in async way
-        local_broadcastmessage: Arc<RwLock<BroadcastMessage>>,
+        local_state: Arc<RwLock<ElevatorState>>, // DELETE THIS, same info down there anyway
+        local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, //INSIDE
         //do we need to have self hall requests or fuck it since we receive them from network_elev_info_rx
         network_elev_info_tx: cbc::Sender<BroadcastMessage>,
         network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
 
         new_elev_state_rx: cbc::Receiver<ElevatorState>,
-        new_elev_state_tx: cbc::Receiver<ElevatorState>,
+   //     new_elev_state_tx: cbc::Receiver<ElevatorState>,
         order_completed_rx: cbc::Receiver<bool>,
         new_order_rx: cbc::Receiver<Order>,
     ) -> Self {
@@ -109,7 +114,7 @@ impl decision {
             network_elev_info_rx,
 
             new_elev_state_rx,
-            new_elev_state_tx,
+    //        new_elev_state_tx,
             order_completed_rx,
             new_order_rx,
         }
@@ -119,6 +124,7 @@ impl decision {
         //updates the state of the elevator based on its id
         //removes timed-out elevator - reassigns its orders to the remaining elevators
         //if elevator was dead and appeared - need reassign all orders again?
+
     }
 
     pub fn new_hall_order() {
@@ -137,6 +143,8 @@ impl decision {
 
     pub async fn hall_order_assigner(&self) {
         //1. map broadcast Message to Elevator system struct
+        //take even dead elevators? and then reassign orders
+        //status assigned stays but elevators take possibly diff orders
         let broadcast = self.local_broadcastmessage.read().await;
 
         let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
@@ -154,7 +162,7 @@ impl decision {
         
         let elevator_system = ElevatorSystem {
             hallRequests: hall_requests,
-            states: broadcast.states.clone(),
+            states: broadcast.states.clone(), //TODO filter out dead states
         };
         println!("{:?}", elevator_system); //for debuggin
 
