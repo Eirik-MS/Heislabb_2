@@ -3,7 +3,7 @@ use std::thread::*;
 use std::sync::Arc;
 
 use tokio::time::{sleep, Duration};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, mpsc};
 
 use crossbeam_channel as cbc;
 
@@ -45,8 +45,8 @@ pub struct ElevatorController {
     stop_btn_rx: cbc::Receiver<bool>,
     obstruction_btn_tx: cbc::Sender<bool>,
     obstruction_btn_rx: cbc::Receiver<bool>,
-    door_closing_tx: cbc::Sender<bool>,
-    door_closing_rx: cbc::Receiver<bool>,
+    door_closing_tx: mpsc::Sender<bool>,
+    door_closing_rx: mpsc::Receiver<bool>,
     poll_period: std::time::Duration, 
 }
 
@@ -56,7 +56,7 @@ impl ElevatorController {
         let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
         let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
         let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>(); 
-        let (door_closing_tx, door_closing_rx) = cbc::unbounded::<bool>();
+        let (door_closing_tx, door_closing_rx) = mpsc::channel(2);
 
         let controller = Arc::new(Self {
             elevator: e::Elevator::init("localhost:15657", elev_num_floors)?,
@@ -144,9 +144,8 @@ impl ElevatorController {
                     state.prev_direction = state.current_direction;
                     state.current_direction = e::DIRN_STOP;
                     
-                    let elevator_clone = self.elevator.clone();
-                    let state_clone = self.state.clone();
-                    ElevatorController::open_door(elevator_clone, state_clone).await;
+                    let door_closing_channel = self.door_closing_tx.clone();
+                    self.open_door(door_closing_channel).await;
                     
                 } else {
                     if state.current_floor == 0 {
@@ -181,21 +180,34 @@ impl ElevatorController {
                 
             },
         }
+
+        tokio::select!{
+            Some(door_closing) = self.door_closing_rx.recv() => {
+                if door_closing {
+                    let mut state_lock = self.state.write().await;
+                    state_lock.door_state = 0; // Door closed
+                    self.elevator.door_light(false);
+                    println!("Door has closed.");
+                }
+            }
+        }
+
         let mut state = self.state.write().await;
         if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
-            let order = self.queue.read().await[0].clone();
-            if order.floor == state.current_floor {
-                //Open Door
-                self.remove_order(order.id);
-                ()
-            } else if order.floor > state.current_floor {
-                self.elevator.motor_direction(e::DIRN_UP);
-                state.current_direction = e::DIRN_UP;
-            } else if order.floor < state.current_floor {
-                self.elevator.motor_direction(e::DIRN_DOWN);
-                state.current_direction = e::DIRN_DOWN;
-            }
-            
+            if !state.door_state{
+                let order = self.queue.read().await[0].clone();
+                 if order.floor == state.current_floor {
+                    //Open Door
+                    self.remove_order(order.id);
+                    ()
+                } else if order.floor > state.current_floor {
+                    self.elevator.motor_direction(e::DIRN_UP);
+                    state.current_direction = e::DIRN_UP;
+                } else if order.floor < state.current_floor {
+                    self.elevator.motor_direction(e::DIRN_DOWN);
+                    state.current_direction = e::DIRN_DOWN;
+                }
+            } 
         }
         //Maybe only change motor direcion her by using the state 
         //or the dirn variable
@@ -203,22 +215,15 @@ impl ElevatorController {
     
     }
 
-    //Just use a timer and send a message over a cbc channel
-    async fn open_door(door_closing_tx: cbc::Sender<bool>) {
+    //Just use a timer and send a message over a mpscNUM_OF_FLOORS channel
+    async fn open_door(&self, door_closing_tx: mpsc::Sender<bool>) {
+        let mut state_lock = self.state.write().await;
+        state_lock.door_state = 1; // Door open
+        self.elevator.door_light(true);
+        
         tokio::spawn(async move {
-            {
-                let mut state_lock = state.write().await;
-                state_lock.door_state = 1; // Door open
-            }
-
-            elevator.door_light(true);
             sleep(Duration::from_secs(4)).await;
-            elevator.door_light(false);
-
-            {
-                let mut state_lock = state.write().await;
-                state_lock.door_state = 0; // Door closed
-            }
+            let _ = door_closing_tx.send(true).await; // Send true when door closes
         });
     }
 
