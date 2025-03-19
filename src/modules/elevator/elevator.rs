@@ -181,17 +181,27 @@ impl ElevatorController {
             },
         }
 
-        tokio::select!{
-            Some(door_closing) = self.door_closing_rx.lock().await.recv().await => {
-                if door_closing {
-                    let mut state_lock = self.state.write().await;
-                    state_lock.door_state = 0; // Door closed
-                    self.elevator.door_light(false);
-                    println!("Door has closed.");
+        // Lock first to ensure the guard lives long enough
+        let mut door_closing_rx_guard = self.door_closing_rx.lock().await;
+            
+        tokio::select! {
+            msg = door_closing_rx_guard.recv() => {
+                match msg {
+                    Some(door_closing) => {
+                        if door_closing {
+                            let mut state_lock = self.state.write().await;
+                            state_lock.door_state = 0; // Door closed
+                            self.elevator.door_light(false);
+                            println!("Door has closed.");
+                        }
+                    }
+                    None => {
+                        println!("door_closing_rx channel closed.");
+                    }
                 }
             }
         }
-
+        
         let mut state = self.state.write().await;
         if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
             if state.door_state == 1{
