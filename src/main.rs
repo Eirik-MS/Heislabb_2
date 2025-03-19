@@ -5,6 +5,8 @@ use tokio::sync::Notify;
 use tokio::time::{sleep, Duration};
 use elevator::ElevatorController;
 
+use modules::common;
+
 const NUM_OF_FLOORS:u8 = 4;
 const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 
