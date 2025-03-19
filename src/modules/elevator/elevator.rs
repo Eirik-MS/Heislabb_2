@@ -3,7 +3,7 @@ use std::thread::*;
 use std::sync::Arc;
 
 use tokio::time::{sleep, Duration};
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{Mutex, RwLock, mpsc};
 
 use crossbeam_channel as cbc;
 
@@ -46,7 +46,7 @@ pub struct ElevatorController {
     obstruction_btn_tx: cbc::Sender<bool>,
     obstruction_btn_rx: cbc::Receiver<bool>,
     door_closing_tx: mpsc::Sender<bool>,
-    door_closing_rx: mpsc::Receiver<bool>,
+    door_closing_rx: Mutex<mpsc::Receiver<bool>>,
     poll_period: std::time::Duration, 
 }
 
@@ -79,7 +79,7 @@ impl ElevatorController {
             obstruction_btn_tx: obstruction_tx,
             obstruction_btn_rx: obstruction_rx,
             door_closing_tx: door_closing_tx,
-            door_closing_rx: door_closing_rx,
+            door_closing_rx: Mutex::new(door_closing_rx),
             poll_period: Duration::from_millis(25),
         });
         let poll_period = controller.poll_period.clone();
@@ -182,7 +182,7 @@ impl ElevatorController {
         }
 
         tokio::select!{
-            Some(door_closing) = self.door_closing_rx.recv() => {
+            Some(door_closing) = self.door_closing_rx.lock().await.recv().await => {
                 if door_closing {
                     let mut state_lock = self.state.write().await;
                     state_lock.door_state = 0; // Door closed
@@ -194,7 +194,7 @@ impl ElevatorController {
 
         let mut state = self.state.write().await;
         if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
-            if !state.door_state{
+            if state.door_state == 1{
                 let order = self.queue.read().await[0].clone();
                  if order.floor == state.current_floor {
                     //Open Door
