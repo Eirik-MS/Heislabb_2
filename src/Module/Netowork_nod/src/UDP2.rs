@@ -1,12 +1,27 @@
-use std::net::UdpSocket;
+use std::net::{UdpSocket, IpAddr, IpV4Addr};
 use serde::{Serialize, Deserialize};
 use std::collections::{VecDeque, HashMap};
 use std::str;
+use std::hash::{Hash, Hasher};
+use local_ip_iddress::local_ip;
+
+//====GenerateIDs====//
+
+fn get_ip() -> Option<string> {
+    local_ip().ok().map(|ip| ip.to_string());
+}
+
+fn generateIDs() -> Option<string>{
+    let ip = get_ip().expect("Failed to get local IP");
+    let id = md::5::compute(ip);
+    Some(format!{"{:x}", id})
+}
 
 //====MessageEnums====//
+
 #[derive(Serialize, Deserialize, Debug)]
 enum Message{
-    elevatorOrder {id: u32, floor: u32, direction: String, internal: bool},
+    elevatorOrder {id: u32, floor: u32, direction: String, internal: bool, completed: bool, assignedTo: u32},
     elevatorState {id: u32, currentFloor: u32, movingDirection: String}
 }
 
@@ -25,38 +40,38 @@ fn UDPBroadcast(message &Message){
 
 //====ServerEnd====//
 
-fn UDPlistener(){
-    let socket = UdpSocket::bind("0.0.0.0.30000").expect("Failed to bind socket");
+fn UDPlistener() -> Option<receivedData>{
+    let socket = UdpSocket::bind("-0.0.0.0.30000").expect("Failed to bind socket");
 
-    println!("UDP server listening on port 30000");
+    println!("UDP listening on port 30000");
 
     let mut buffer = [0; 1024];
 
-    let(size, source) = socket.recv_from(&buffer).expect("Failed to receive data");
+    let(size, source) = socket.recv_from(&mut buffer).expect("Failed to receive data");
     
     enum receivedData {
-        Order {id: u32, floor: u32, direction: String, internal: bool},
+        Order {id: u32, floor: u32, direction: String, internal: bool, completed: bool, assignedTo: u32},
         State {id: u32, currentFloor: u32, movingDirection: String}
     };
 
-    let message: Message = match serde_json::from_slice(&receivedData){
+    let message: Message = match serde_json::from_slice(&buffer[..size]){
         Ok(msg) => msg;
         Err(e) => {
             println!("Failed to deserialize message: {}", e);
-            return;
+            return None;
         }
     };
 
     let extractedData = match message {
-        Message::elevatorOrder{id, floor, direction, internal} => {
-            receivedData::Order {id, floor, direction, internal} 
+        Message::elevatorOrder{id, floor, direction, internal, completed, assignedTo} => {
+            receivedData::Order {id, floor, direction, internal, competed, assignedTo} 
         }
         Message::elevatorState{id, currentFloor, movingDirection} => {
             receivedData::State {id, currentFloor, movingDirection}
         }
     }
 
-    some(extractedData)
+    Some(extractedData)
 }
 
 
