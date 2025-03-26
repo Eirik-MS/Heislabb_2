@@ -203,12 +203,14 @@ impl decision {
             }
         
             let cab_requests: Vec<bool> = (1..=MAX_FLOORS) 
-                .map(|floor| {
-                    broadcast.orders.values().any(|order| {
-                        (order.floor as usize) == floor && order.call == 2 && order.status == OrderStatus::confirmed
+            .map(|floor| {
+                broadcast.orders.values().any(|orders| {
+                    orders.iter().any(|order| {
+                        order.floor as usize == floor && order.call == 2 && order.status == OrderStatus::confirmed
                     })
                 })
-                .collect();
+            })
+            .collect();
         
             let behaviour = if state.door_open {
                 "doorOpen"
@@ -246,6 +248,7 @@ impl decision {
         .expect("Failed to execute hall_request_assigner");
 
         let hra_output_str : String;
+        let mut new_orders: HashMap<String, Vec<Order>> = HashMap::new();
 
         if hra_output.status.success() {
             let hra_output_str = String::from_utf8(hra_output.stdout)
@@ -257,45 +260,45 @@ impl decision {
             for (elev_id, floors) in &hra_output {
                 println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
             }
-        }
-        // 3. update local broadcast message according to the return value of executable - hra_output
-        let mut new_orders: HashMap<String, Vec<Order>> = HashMap::new();
 
-        for (new_elevator_id, orders) in &hra_output {
-            for (floor_index, buttons) in orders.iter().enumerate() {
-                let floor = (floor_index + 1) as u8; 
-                for (call_type, &is_confirmed) in buttons.iter().enumerate() { //call type can only be either 0 or 1 (up, down)
-                    if is_confirmed { //true e. i. there is an order
-                        let call = call_type as u8; 
-
-                        let mut found_order: Option<Order> = None;
-                        let mut previous_elevator_id: Option<String> = None;
-
-                        for (elevator_id, orders) in broadcast.orders.iter_mut() {
-                            if let Some(order) = orders.iter_mut().find(|order| order.floor == floor && order.call == call) {
-                                found_order = Some(order.clone());
-                                previous_elevator_id = Some(elevator_id.clone());
-                                break;
-                            }
-                        }
-        
-                        if let Some(order) = found_order {
-                            if let Some(prev_id) = previous_elevator_id {
-                                if let Some(prev_orders) = broadcast.orders.get_mut(&prev_id) {
-                                    if let Some(pos) = prev_orders.iter().position(|x| x == &order) {
-                                        prev_orders.remove(pos);
-                                    }
+            for (new_elevator_id, orders) in hra_output.iter() {
+                for (floor_index, buttons) in orders.iter().enumerate() {
+                    let floor = (floor_index + 1) as u8; 
+                    for (call_type, &is_confirmed) in buttons.iter().enumerate() { //call type can only be either 0 or 1 (up, down)
+                        if is_confirmed { //true e. i. there is an order
+                            let call = call_type as u8; 
+    
+                            let mut found_order: Option<Order> = None;
+                            let mut previous_elevator_id: Option<String> = None;
+    
+                            for (elevator_id, orders) in broadcast.orders.iter_mut() {
+                                if let Some(order) = orders.iter_mut().find(|order| order.floor == floor && order.call == call) {
+                                    found_order = Some(order.clone());
+                                    previous_elevator_id = Some(elevator_id.clone());
+                                    break;
                                 }
                             }
-        
-                            new_orders.entry(new_elevator_id.clone())
-                                .or_default()
-                                .push(order);
+            
+                            if let Some(order) = found_order {
+                                if let Some(prev_id) = previous_elevator_id {
+                                    if let Some(prev_orders) = broadcast.orders.get_mut(&prev_id) {
+                                        if let Some(pos) = prev_orders.iter().position(|x| x == &order) {
+                                            prev_orders.remove(pos);
+                                        }
+                                    }
+                                }
+            
+                                new_orders.entry(new_elevator_id.clone())
+                                    .or_default()
+                                    .push(order);
+                            }
                         }
                     }
                 }
             }
         }
+        // 3. update local broadcast message according to the return value of executable - hra_output
+
         
         for (elevator_id, orders) in new_orders {
             for order in orders {
