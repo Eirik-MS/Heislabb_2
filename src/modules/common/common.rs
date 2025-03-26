@@ -87,7 +87,7 @@ pub struct ElevatorStatus {
 
 pub struct AliveDeadInfo {
     pub elevators: HashMap<String, ElevatorStatus>,
-    //pub last_heartbeat: HashMap<String, Instant>,
+    pub last_heartbeat: HashMap<String, Instant>,
 }
 
 impl AliveDeadInfo {
