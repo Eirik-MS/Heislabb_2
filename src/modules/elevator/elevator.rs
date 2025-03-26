@@ -1,3 +1,4 @@
+use std::default;
 use std::sync::Arc;
 use std::thread::spawn;
 use tokio::sync::mpsc::{Sender,Receiver};
@@ -124,165 +125,188 @@ impl ElevatorController {
     }
 
 
-    //Step function that will need to be run by the user of the module every time it should increment
+    //Step function that will need to be run async fn step_low_level(&self) {by the user of the module every time it should increment
     pub async fn step(&self) {
-        //---------------------------------------------
-        //Comunicate with the elevator low level driver.
-        cbc::select! {
-            recv(self.call_btn_rx) -> a => {
-                let call_button = a.unwrap();
-                println!("{:#?}", call_button);
+        // Run the three parts concurrently.
+        tokio::join!(
+            self.step_low_level(),
+            self.step_async_channels(),
+            self.step_logic()
+    );
+    
+    }
+        async fn step_low_level(&self) {
+            //---------------------------------------------
+            //Comunicate with the elevator low level driver.
+            //println!("Elevator step.");
+            cbc::select! {
+                recv(self.call_btn_rx) -> a => {
+                    let call_button = a.unwrap();
+                    println!("{:#?}", call_button);
+
+                    let order = Order {
+                        call: call_button.call,
+                        floor: call_button.floor,
+                        status: OrderStatus::Requested,
+                        barrier: HashSet::new(),
+                    }; 
+
+                    let _ = self.new_orders_from_elevator_tx.send(order).await;
+
+                },
+
+                //Checks what floor we are at and if we compleate an order by stopping here.
+                recv(self.floor_sense_rx) -> a => {
+                    let floor: u8 = a.unwrap();
+                    println!("Floor sense: {:#?}", floor);
+                    let mut state = self.state.write().await;
+                    state.prev_floor = state.current_floor;
+                    state.current_floor = floor;
+
+                    let should_stop = {
+                        let queue = self.queue.read().await;
+                        queue.iter().any(|order| order.floor == floor)
+                    };
                 
-                let order = Order {
-                    call: call_button.call,
-                    floor: call_button.floor,
-                    status: OrderStatus::Requested,
-                    barrier: HashSet::new(),
-                }; 
-
-                let _ = self.new_orders_from_elevator_tx.send(order).await;
-
-            },
-
-            //Checks what floor we are at and if we compleate an order by stopping here.
-            recv(self.floor_sense_rx) -> a => {
-                let floor: u8 = a.unwrap();
-                let mut state = self.state.write().await;
-                state.prev_floor = state.current_floor;
-                state.current_floor = floor;
-                
-                let should_stop = {
-                    let queue = self.queue.read().await;
-                    queue.iter().any(|order| order.floor == floor)
-                };
-            
-                //Check if the elevator should stop at the current floor and send message to the 
-                //decision module when the door opens
-                if should_stop {
-                    self.elevator.motor_direction(e::DIRN_STOP);
-                    state.prev_direction = state.current_direction;
-                    state.current_direction = e::DIRN_STOP;
-
-                    self.remove_order(floor).await;
-                    //Start opening the door by sending a message over a mpsc channel
-                    let door_closing_channel = self.door_closing_tx.clone();
-                    self.open_door(door_closing_channel).await;
-                    
-                } else {
-                    if state.current_floor == 0 {
-                        state.current_direction = e::DIRN_STOP;
+                    //Check if the elevator should stop at the current floor and send message to the 
+                    //decision module when the door opens
+                    if should_stop {
                         self.elevator.motor_direction(e::DIRN_STOP);
-                    } else if state.current_floor == self.num_of_floors - 1 {
+                        state.prev_direction = state.current_direction;
                         state.current_direction = e::DIRN_STOP;
-                        self.elevator.motor_direction(e::DIRN_STOP);
-                    }
-                }
 
-                if self.queue.read().await.len() == 0 {
-                    state.current_direction = e::DIRN_STOP;
-                    self.elevator.motor_direction(e::DIRN_STOP);
-                }
-            },
-            recv(self.stop_btn_rx) -> a => {
-                let stop = a.unwrap();
-                let mut state = self.state.write().await;
-                state.emergency_stop = true;
-                state.current_direction = e::DIRN_STOP;
-                self.elevator.motor_direction(e::DIRN_STOP);
-                println!("Stop button: {:#?}", stop);
-                
-            },
-            recv(self.obstruction_btn_rx) -> a => {
-                let obstr = a.unwrap();
-                println!("Obstruction: {:#?}", obstr);
-                let mut state = self.state.write().await;
-                if obstr {
-                    state.emergency_stop = true;
-                    self.elevator.motor_direction(e::DIRN_STOP);
-                } else {
-                    state.emergency_stop = false;
-                    self.elevator.motor_direction(state.current_direction);
-                }
-                
-            },
-        }
+                        self.remove_order(floor).await;
+                        //Start opening the door by sending a message over a mpsc channel
+                        let door_closing_channel = self.door_closing_tx.clone();
+                        self.open_door(door_closing_channel).await;
 
-        //------------------------------------------------------------------
-        // Lock first to ensure the guard lives long enough to be used
-        let mut door_closing_rx_guard = self.door_closing_rx.lock().await;
-        let mut elevator_assigned_orders_guard = self.elevator_assigned_orders_rx.lock().await;
-        let mut order_recived_and_confirmed_guard = self.order_recived_and_confirmed_rx.lock().await;
-
-        //Comunicate with other modules    
-        tokio::select! {
-            msg = door_closing_rx_guard.recv() => {
-                match msg {
-                    Some(door_closing) => {
-                        if door_closing {
-                            let mut state_lock = self.state.write().await;
-                            state_lock.door_open = false; // Door closed
-                            self.elevator.door_light(false);
-                            println!("Door has closed.");
+                    } else {
+                        if state.current_floor == 0 {
+                            state.current_direction = e::DIRN_STOP;
+                            self.elevator.motor_direction(e::DIRN_STOP);
+                        } else if state.current_floor == self.num_of_floors - 1 {
+                            state.current_direction = e::DIRN_STOP;
+                            self.elevator.motor_direction(e::DIRN_STOP);
                         }
                     }
-                    None => {
-                        //println!("door_closing_rx channel closed.");
+
+                    if self.queue.read().await.len() == 0 {
+                        state.current_direction = e::DIRN_STOP;
+                        self.elevator.motor_direction(e::DIRN_STOP);
                     }
+                },
+                recv(self.stop_btn_rx) -> a => {
+                    let stop = a.unwrap();
+                    let mut state = self.state.write().await;
+                    state.emergency_stop = true;
+                    state.current_direction = e::DIRN_STOP;
+                    self.elevator.motor_direction(e::DIRN_STOP);
+                    println!("Stop button: {:#?}", stop);
+
+                },
+                recv(self.obstruction_btn_rx) -> a => {
+                    let obstr = a.unwrap();
+                    println!("Obstruction: {:#?}", obstr);
+                    let mut state = self.state.write().await;
+                    if obstr {
+                        state.emergency_stop = true;
+                        self.elevator.motor_direction(e::DIRN_STOP);
+                    } else {
+                        state.emergency_stop = false;
+                        self.elevator.motor_direction(state.current_direction);
+                    }
+
+                },
+                default(Duration::from_millis(100)) => {
+                    //println!("CBC sleep");
                 }
-            }, 
-            reciving_order = elevator_assigned_orders_guard.recv() => {
-                match reciving_order {
-                    Some(order) => {
-                        self.add_order(order).await;
-                    }
-                    None => {
-                        //println!("elevator_assigned_orders_rx channel closed.");
-                    }
-                }
-            }, 
-            reciving_confirmation = order_recived_and_confirmed_guard.recv() => {
-                match reciving_confirmation {
-                    Some(order) => {
-                        self.elevator.call_button_light(order.floor, order.call, true);
-                    }
-                    None => {
-                        //println!("order_recived_and_confirmed_rx channel closed.");
-                    }
-                }
-            },
+            }
         }
 
-        //--------------------------------------------------------------------------------
-        //Elevator movment Logic
-        let mut state = self.state.write().await;
+        async fn step_async_channels(&self) {
+            //------------------------------------------------------------------
+            // Lock first to ensure the guard lives long enough to be used
+            //println!("Elevator step 2.");
+            let mut door_closing_rx_guard = self.door_closing_rx.lock().await;
+            let mut elevator_assigned_orders_guard = self.elevator_assigned_orders_rx.lock().await;
+            let mut order_recived_and_confirmed_guard = self.order_recived_and_confirmed_rx.lock().await;
 
-        if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
-            //If door is not open
-            if !state.door_open {
-                let order = self.queue.read().await[0].clone();
-                 if order.floor == state.current_floor {
-                    
-                    let door_closing_channel = self.door_closing_tx.clone();
-                    self.open_door(door_closing_channel).await;
-                    self.remove_order(order.floor).await;
-                    ()
-                } else if order.floor > state.current_floor {
-                    self.elevator.motor_direction(e::DIRN_UP);
-                    state.current_direction = e::DIRN_UP;
-                } else if order.floor < state.current_floor {
-                    self.elevator.motor_direction(e::DIRN_DOWN);
-                    state.current_direction = e::DIRN_DOWN;
-                }
-            } 
+            //Comunicate with other modules    
+            tokio::select! {
+                msg = door_closing_rx_guard.recv() => {
+                    match msg {
+                        Some(door_closing) => {
+                            if door_closing {
+                                let mut state_lock = self.state.write().await;
+                                state_lock.door_open = false; // Door closed
+                                self.elevator.door_light(false);
+                                println!("Door has closed.");
+                            }
+                        }
+                        None => {
+                            //println!("door_closing_rx channel closed.");
+                        }
+                    }
+                }, 
+                reciving_order = elevator_assigned_orders_guard.recv() => {
+                    match reciving_order {
+                        Some(order) => {
+                            self.add_order(order).await;
+                        }
+                        None => {
+                            //println!("elevator_assigned_orders_rx channel closed.");
+                        }
+                    }
+                }, 
+                reciving_confirmation = order_recived_and_confirmed_guard.recv() => {
+                    match reciving_confirmation {
+                        Some(order) => {
+                            self.elevator.call_button_light(order.floor, order.call, true);
+                        }
+                        None => {
+                            //println!("order_recived_and_confirmed_rx channel closed.");
+                        }
+                    }
+                },
+                _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                    //println!("Tokio sleep.");
+                },
+            }
         }
-        //Maybe only change motor direcion her by using the state 
-        //or the dirn variable
-        //self.elevator.motor_direction(dirn);
 
-        //Send state data to other modules
-        let elevator_state_clone = self.state.read().await.clone(); 
-        self.elevator_state_tx.send(elevator_state_clone).await.unwrap();
-    
+        async fn step_logic(&self) {
+            //--------------------------------------------------------------------------------
+            //Elevator movment Logic
+            {
+            let mut state = self.state.write().await;
+            if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
+                //If door is not open
+                println!("Queue not empty.");
+                if !state.door_open {
+                    let order = self.queue.read().await[0].clone();
+                     if order.floor == state.current_floor {
+                        println!("Open current floor door.");
+                        let door_closing_channel = self.door_closing_tx.clone();
+                        self.open_door(door_closing_channel).await;
+                        self.remove_order(order.floor).await;
+                        ()
+                    } else if order.floor > state.current_floor {
+                        self.elevator.motor_direction(e::DIRN_UP);
+                        state.current_direction = e::DIRN_UP;
+                    } else if order.floor < state.current_floor {
+                        self.elevator.motor_direction(e::DIRN_DOWN);
+                        state.current_direction = e::DIRN_DOWN;
+                    }
+                } 
+            }
+        }
+            //Maybe only change motor direcion her by using the state 
+            //or the dirn variable
+            //self.elevator.motor_direction(dirn);
+
+            //Send state data to other modules
+            let elevator_state_clone = self.state.read().await.clone(); 
+            self.elevator_state_tx.send(elevator_state_clone).await.unwrap();
     }
 
     //Just use a timer and send a message over a mpsc channel

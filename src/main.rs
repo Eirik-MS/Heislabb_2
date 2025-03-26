@@ -28,26 +28,29 @@ async fn main() -> std::io::Result<()> {
     let elevator_id: String = "elevator1".to_string();
 
     // Setup channels, etc.
-    let (new_orders_from_elevator_tx, new_orders_from_elevator_rx) = mpsc::channel(2);
-    let (elevator_assigned_orders_tx, elevator_assigned_orders_rx) = mpsc::channel(2);
-    let (orders_completed_tx, orders_completed_rx) = mpsc::channel(2);
-    let (elevator_state_tx, elevator_state_rx) = mpsc::channel(2);
-    let (orders_confirmed_tx, orders_confirmed_rx) = mpsc::channel(2);
+    let (new_orders_from_elevator_tx, new_orders_from_elevator_rx) = mpsc::channel(100);
+    let (elevator_assigned_orders_tx, elevator_assigned_orders_rx) = mpsc::channel(100);
+    let (orders_completed_tx, orders_completed_rx) = mpsc::channel(100);
+    let (elevator_state_tx, elevator_state_rx) = mpsc::channel(100);
+    let (orders_confirmed_tx, orders_confirmed_rx) = mpsc::channel(100);
 
     // Setup network channels 
-    let (decision_to_network_tx, decision_to_network_rx) = mpsc::channel(2);
-    let (network_to_decision_tx, network_to_decision_rx) = mpsc::channel(2);
-    let (network_alive_tx, network_alive_rx) = mpsc::channel(2);
+    let (decision_to_network_tx, decision_to_network_rx) = mpsc::channel(100);
+    let (network_to_decision_tx, network_to_decision_rx) = mpsc::channel(100);
+    let (network_alive_tx, network_alive_rx) = mpsc::channel(100);
 
     // Spawn elevator task
     // Spawn a separate thread to run the elevator logic
     let elevator_handle = tokio::task::spawn_blocking(move || {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async move {
+            let mut thread_counter = 0;
             let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS, new_orders_from_elevator_tx, elevator_assigned_orders_rx, orders_completed_tx, elevator_state_tx, orders_confirmed_rx).await.unwrap();
             loop {
+                //println!("Elevator thread counter: {}", thread_counter);
                 elev_ctrl.step().await;
                 std::thread::sleep(UPDATE_INTERVAL);
+                thread_counter += 1;
             }
         });
     });

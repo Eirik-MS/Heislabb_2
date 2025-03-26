@@ -164,7 +164,7 @@ impl Decision {
                     Some(new_state) => {
                         let mut broadcast_message = self.local_broadcastmessage.write().await;
                         broadcast_message.states.insert(self.local_id.clone(), new_state);
-                        println!("Updated broadcast message: {:?}", *broadcast_message);
+                        //println!("Updated broadcast message: {:?}", *broadcast_message);
                     }
                     None => {
                         println!("new_elev_state_rx channel closed.");
