@@ -7,6 +7,9 @@ use std::collections::{VecDeque, HashMap};
 use std::str;
 use std::hash::{Hash, Hasher};
 use local_ip_address::local_ip;
+use std::sync::{Arc, Mutex};
+use std::time{Instant, Duration};
+use crossbeam_channel as cbc;
 use md5;
 
 //====GenerateIDs====//
@@ -36,10 +39,7 @@ pub fn UDPBroadcast(message: &BroadcastMessage){
 
 //====ServerEnd====//
 
-pub fn UDPlistener() -> Option<BroadcastMessage>{
-    let socket = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
-
-    println!("UDP listening on port 30000");
+pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
 
     let mut buffer = [0; 1024];
 
@@ -53,7 +53,60 @@ pub fn UDPlistener() -> Option<BroadcastMessage>{
         }
     };
 
+    if message.source_id != SYSTEM_ID {
+        println!("Received message from unexpectrd peer: {}", message.source_id);
+        return None;
+    }
+
     Some(message)
 }
+
+//====HeartBeat====//
+
+pub fn monitor_elevators(
+    socket: UdpSocket,
+    decision_tx: Sender<AliveDeadInfo>,
+    alive_dead_info: Arc<Mutex<AliveDeadInfo>>,
+    timeout_duration: Duration,
+){
+    loop {
+        match UDPlistener(&socket) {
+            Some(message) => {
+                let mut alive_dead_info = alive_dead_info.lock().unwrap();
+
+                if !alive_dead_info.last_heartbeat.contains_key(&message.source_id) {
+                    alive_dead_info.update_elevator_status(message.source_id.clone(), true);
+                    alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
+                } 
+                
+                else {
+                    alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
+                }
+
+                let now = Instant::now();
+                let mut to_remove = Vec::new();
+                
+                for (id, last_heartbeat) in &alive_dead_info.last_heartbeat {
+                    if now.duration_since(*last_heartbeat) > timeout_duration {
+                        
+                        alive_dead_info.update_elevator_status(id.clone(), false);
+                        to_remove.push(id.clone());
+                    }
+                }
+
+                decision_tx.send(alive_dead_info.clone()).expect("Failed to send data to decision thread");
+
+                for id in to_remove {
+                    alive_dead_info.last_heartbeat.remove(&id);
+                }
+            }
+            None => {
+                continue;
+            }
+        }
+    }
+}
+            
+
 
 
