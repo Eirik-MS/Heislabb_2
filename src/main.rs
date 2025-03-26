@@ -5,7 +5,6 @@ mod modules{
 
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
-use std::io::Write;
 use serde::{Deserialize, Serialize};
 
 use modules::decision::ElevatorState;
@@ -29,18 +28,28 @@ const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     
+    // Create channels for communication between the elevator controller and the decision thread
+    let (new_orders_from_elevator_tx, new_orders_from_elevator_rx) = mpsc::channel(2);
+    let (elevator_assigned_orders_tx, elevator_assigned_orders_rx) = mpsc::channel(2);
+    let (orders_compleated_tx, orders_compleated_rx) = mpsc::channel(2);
+    let (elevator_state_tx, elevator_state_rx) = mpsc::channel(2);
+    let (orders_confirmed_tx, orders_confirmed_rx) = mpsc::channel(2);
+
+
 
     // Spawn a separate thread to run the elevator logic
     let elevator_handle = tokio::task::spawn_blocking(move || {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async move {
-            let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS).await.unwrap();
+            let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS, new_orders_from_elevator_tx, elevator_assigned_orders_rx, orders_compleated_tx, elevator_state_tx, orders_confirmed_rx).await.unwrap();
             loop {
                 elev_ctrl.step().await;
                 std::thread::sleep(UPDATE_INTERVAL);
             }
         });
     });
+
+
     // Construct test JSON data
     let mut states = HashMap::new();
     states.insert(
@@ -63,7 +72,8 @@ async fn main() -> std::io::Result<()> {
         },
     );
 
-    /*let system = ElevatorSystem {
+    /*
+    let system = ElevatorSystem {
         hallRequests: vec![
             vec![false, false],
             vec![true, false],
@@ -96,6 +106,6 @@ async fn main() -> std::io::Result<()> {
     }
     
     println!("Response from executable: {}", hra_output_str);
-        
+        */
     Ok(()) 
 }
