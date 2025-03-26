@@ -11,24 +11,24 @@ use local_ip_address::local_ip;
 //====GenerateIDs====//
 
 fn get_ip() -> Option<String> {
-    local_ip().ok().map(|ip| ip.to_string());
+    local_ip().ok().map(|ip| ip.to_string())
 }
 
 pub fn generateIDs() -> Option<string>{
     let ip = get_ip().expect("Failed to get local IP");
-    let id = md::5::compute(ip);
+    let id = md5::compute(ip);
     Some(format!{"{:x}", id})
 }
 
 //====ClientEnd====//
 
-pub fn UDPBroadcast(message &BroadcastMessage){
+pub fn UDPBroadcast(message: &BroadcastMessage){
     let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to find socket");
 
     socket.set_broadcast(true).expect("Failed to enable UDP broadcast");
 
     let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30000);
-    let serMessage = serde_json::to_string(&BroadcastMessage).expect("Failed to serialize message");
+    let serMessage = serde_json::to_string(&message).expect("Failed to serialize message");
 
     socket.send_to(serMessage.as_bytes(), broadcast_addr).expect("Failed to broadcast message on port");
 }
@@ -52,7 +52,7 @@ pub fn UDPlistener() -> Option<BroadcastMessage>{
         }
     };
 
-    Some(message);
+    Some(message)
 }
 
 

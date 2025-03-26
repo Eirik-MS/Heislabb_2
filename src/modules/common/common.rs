@@ -1,3 +1,4 @@
+use serde::{Serialize, Deserialize};
 
 
 // struct ElevatorState {
@@ -8,8 +9,7 @@
 //     emergency_stop: bool,
 //     door_state: u8,
 // }
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)] 
 pub struct BroadcastMessage {
     pub version: u64, //like order ID but for the whole broadcast message
     pub hallRequests: std::collections::HashMap<String, Vec<HallOrder>>, //elevID, hallOrders
@@ -91,14 +91,13 @@ pub enum Behaviour {
 //     //TODO: cab and hall orders sent to elevator
 // }
 
-
+//
 // //====MessageEnums====//
 // #[derive(Serialize, Deserialize, Debug)]
 // enum Message{
 //     elevatorOrder {id: u32, floor: u32, direction: String, internal: bool},
 //     elevatorState {id: u32, currentFloor: u32, movingDirection: String}
 // }
-
 // enum ReceivedData {
 //     Order {id: u32, floor: u32, direction: String, internal: bool},
 //     State {id: u32, currentFloor: u32, movingDirection: String}
