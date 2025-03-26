@@ -1,4 +1,3 @@
-use std::sync::Mutex;
 use std::sync::Arc;
 //use elevator::Order;
 //use crate::elevator::{ElevatorState, Order}; //should map to my structs here?
@@ -7,11 +6,11 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 use std::collections::HashMap;
-use tokio::sync::RwLock;
-use std::time::{Duration, Instant};
+use std::time::{ Instant};
 use std::process::{Command, Stdio};
+use tokio::time::{sleep, Duration};
+use tokio::sync::{Mutex, RwLock, mpsc};
 const MAX_FLOORS: usize = 4;
-
 // All peers supposed to have:
 // list of elevator states
 // list of orders --> needs more states such as new, in process, finished
@@ -66,7 +65,7 @@ impl Default for ElevatorState {
             behaviour: Behaviour::idle,    
             floor: 1,                     
             direction: Directions::stop,   
-            cabRequests: vec![false; 10],  
+            cabRequests: vec![false; 4],  
             last_seen: None,             
             dead: false,                 
         }
@@ -89,7 +88,7 @@ pub enum Behaviour {
 //TEMPORARY: most of the structs here are supposed to be moved to
 //common.rs, i have them here only debug and focus on implemenitng otehr
 //functionality 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone,)] // everything just in case idk
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone,)] 
 pub struct Order {
     pub call: CallFrom, //hall or cab
     pub floor: u8,
@@ -112,8 +111,9 @@ pub struct decision {
     new_elev_state_rx: cbc::Receiver<ElevatorState>, //state to modify
   //  new_elev_state_tx: cbc::Receiver<ElevatorState>, //when updated send back to fsm
     order_completed_rx: cbc::Receiver<bool>, //trigger for order state transition
-    new_order_rx: cbc::Receiver<Order> //should be mapped to cab or hall orders (has id, call, floor), needs DIR
+    new_order_rx: cbc::Receiver<Order>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
     //TODO: cab and hall orders sent to elevator
+    elev_orders_tx: cbc::Sender<Vec<Order>>,
 }
 
 impl decision {
@@ -129,6 +129,7 @@ impl decision {
    //     new_elev_state_tx: cbc::Receiver<ElevatorState>,
         order_completed_rx: cbc::Receiver<bool>,
         new_order_rx: cbc::Receiver<Order>,
+        elev_orders_tx: cbc::Sender<Vec<Order>>,
     ) -> Self {
         decision {
             local_id,
@@ -142,24 +143,57 @@ impl decision {
     //        new_elev_state_tx,
             order_completed_rx,
             new_order_rx,
+            elev_orders_tx,
         }
     }
 
-    pub fn elev_state_update(&mut self, new_state: ElevatorState, elev_id: String) {
-        //updates the state of the elevator based on its id
-        //removes timed-out elevator - reassigns its orders to the remaining elevators
-        //if elevator was dead and appeared - need reassign all orders again?
+    pub async fn step(&mut self) { 
+        cbc::select! {
+
+            recv(self.network_elev_info_rx) -> package => {
+                let received_BM = package.unwrap();
+                //update current broadcast message
+                let mut broadcast = self.local_broadcastmessage.write().await;
+                if (received_BM.version > broadcast.version) {
+                    broadcast.version = received_BM.version;
+                    broadcast.hallRequests = received_BM.hallRequests;
+                    broadcast.states = received_BM.states;
+
+                    self.hall_order_assigner(); //reorder
+                }
+                else { /*REJECTING - older versions*/}
+            },
+
+            recv(self.new_elev_state_rx) -> package => {},
+
+            recv(self.new_order) -> package => {},
+
+            recv(self.order_completed_rx) -> package => {},
+
+        }
     }
 
-    pub fn new_order() {
+    pub fn elev_state_update(&mut self) { //FSM
+        //receives from the FSM updates state calls order assigner
+
+    }
+
+    pub fn new_order() { //FSM
+
         //supposedly updates hallOrders in elevatorSystem struct
         //updates cab orders in local_state of the elevator 
     }
 
-    pub fn order_completed() {
+    pub fn order_completed() { //FSM
         //deals with completed orders
         //supposedly removes them from the local cab orders
         //but also from the global hall queue... how?
+    }
+
+    pub fn handle_timeout() { //based on NETWORK
+        //needs to handle lost elevators
+        //additionally new elevators
+        //upduate the broadcast message and call hall assigner to fix stuff
     }
 
     pub async fn hall_order_assigner(&mut self) { //check if mut is needed here
@@ -170,6 +204,7 @@ impl decision {
 
         let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
         //1.1 map hall orders
+        //todo: filter out dead elevators
         for (_id, orders) in &broadcast.hallRequests {
             for order in orders {
                 let floor_index = order.floor.saturating_sub(1); //substracts apparently good
@@ -252,9 +287,5 @@ impl decision {
         } else {
             println!("Error: Execution failed");
         }
-    }
-
-    pub fn run ()  {
-        //uses functions above to coordinate the process     
     }
 }
