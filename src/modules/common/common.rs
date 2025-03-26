@@ -42,6 +42,7 @@ pub enum OrderStatus {
 // }
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)] 
 pub struct BroadcastMessage {
+    pub source_id: String,
     pub version: u64, //like order ID but for the whole broadcast message
     pub hallRequests: std::collections::HashMap<String, Vec<HallOrder>>, //elevID, hallOrders
     pub states: std::collections::HashMap<String, ElevatorState> //same as in elevator system
@@ -77,6 +78,31 @@ pub enum Behaviour {
     moving,
     doorOpen
 }
+
+#[derive(Debug, Clone)]
+pub struct ElevatorStatus {
+    pub id: String,
+    pub is_alive: bool,
+}
+
+pub struct AliveDeadInfo {
+    pub elevators: HashMap<String, ElevatorStatus>,
+    //pub last_heartbeat: HashMap<String, Instant>,
+}
+
+impl AliveDeadInfo {
+    pub fn new() -> Self {
+        AliveDeadInfo {
+            elevators: HashMap::new(),
+            last_heartbeat: HashMap::new(),
+        }
+    }
+
+    pub fn update_elevator_status(&mut self, id: String, is_alive: bool) {
+        self.elevators.insert(id.clone(), ElevatorStatus { id, is_alive });
+    }
+}
+
 
 // #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 // pub enum OrderStatus { //like a counter, only goes in one direction!
