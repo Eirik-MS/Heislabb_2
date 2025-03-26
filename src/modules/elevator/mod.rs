@@ -1,4 +1,8 @@
 //When I wrote this code only God and I new what was going on, now only God knows
+mod common;
+
+use common::*;
+
 use std::thread::*;
 use std::sync::Arc;
 

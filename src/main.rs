@@ -1,3 +1,5 @@
+mod decision;
+mod elevator;
 
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
@@ -59,7 +61,7 @@ async fn main() -> std::io::Result<()> {
         },
     );
 
-    let system = ElevatorSystem {
+    /*let system = ElevatorSystem {
         hallRequests: vec![
             vec![false, false],
             vec![true, false],
@@ -67,11 +69,11 @@ async fn main() -> std::io::Result<()> {
             vec![false, true],
         ],
         states,
-    };
+    };*/
 
     Ok(elevator_handle.await?);
     // Serialize JSON
-    let input_json = serde_json::to_string_pretty(&system).expect("Failed to serialize");
+    //let input_json = serde_json::to_string_pretty(&system).expect("Failed to serialize");
     let hra_output = Command::new("./src/modules/decision/hall_request_assigner")
     .arg("--input")
     .arg(&input_json)
