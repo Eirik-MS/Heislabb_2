@@ -47,12 +47,12 @@ async fn main() -> std::io::Result<()> {
     // Spawn decision task
     let decision_handle = tokio::spawn(async move {
         let decision = Decision::new(
-            system_id,
+            elevator_id,
             elevator_state_rx,
             orders_completed_rx,
             new_orders_from_elevator_rx,
             elevator_assigned_orders_tx,
-            orders_confirmed_tx,
+            //orders_confirmed_tx,
         ).await.expect("Failed to create Decision");
         
         let mut interval = interval(UPDATE_INTERVAL);
