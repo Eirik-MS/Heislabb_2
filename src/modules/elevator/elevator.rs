@@ -22,7 +22,7 @@ struct ElevatorState {
 #[derive(Clone)] // Add Clone trait
 pub struct Order {
     pub id: u32,
-    pub call: u8,
+    pub call: u8, //0, 1, 2 up dwon cab
     pub floor: u8,
 }
 
