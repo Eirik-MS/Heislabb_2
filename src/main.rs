@@ -5,6 +5,7 @@ use modules::common::*;
 use modules::elevator::*;
 use modules::decision::*;
 use modules::network::*;
+use serde::de;
 
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
@@ -32,6 +33,11 @@ async fn main() -> std::io::Result<()> {
     let (elevator_state_tx, elevator_state_rx) = mpsc::channel(2);
     let (orders_confirmed_tx, orders_confirmed_rx) = mpsc::channel(2);
 
+    // Setup network channels 
+    let (decision_to_network_tx, decision_to_network_rx) = mpsc::channel(2);
+    let (network_to_decision_tx, network_to_decision_rx) = mpsc::channel(2);
+    let (network_alive_tx, network_alive_rx) = mpsc::channel(2);
+
     // Spawn elevator task
     // Spawn a separate thread to run the elevator logic
     let elevator_handle = tokio::task::spawn_blocking(move || {
@@ -49,6 +55,9 @@ async fn main() -> std::io::Result<()> {
     let decision_handle = tokio::spawn(async move {
         let decision = Decision::new(
             elevator_id,
+            decision_to_network_tx,
+            network_to_decision_rx,
+            network_alive_rx,
             elevator_state_rx,
             orders_completed_rx,
             new_orders_from_elevator_rx,
