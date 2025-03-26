@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::thread::spawn;
 use tokio::sync::mpsc::{Sender,Receiver};
 use tokio::time::{sleep, Duration};
 use tokio::sync::{Mutex, RwLock, mpsc};
@@ -87,7 +88,7 @@ impl ElevatorController {
             door_closing_rx: Mutex::new(door_closing_rx),
             new_orders_from_elevator_tx: new_orders_from_elevator_tx,
             elevator_assigned_orders_rx: Mutex::new(elevator_assigned_orders_rx),
-            order_recived_and_confirmed_rx: Mutex::new(orders_recived_compleated_rx),
+            order_recived_and_confirmed_rx: Mutex::new(orders_recived_completed_rx),
             orders_completed_tx: orders_completed_tx,
             elevator_state_tx: elevator_state_tx,
         });
@@ -134,7 +135,7 @@ impl ElevatorController {
                 let order = Order {
                     call: call_button.call,
                     floor: call_button.floor,
-                    status: OrderStatus::requested,
+                    status: OrderStatus::Requested,
                     aq_ids: Vec::<String>::new(),
                 }; 
 

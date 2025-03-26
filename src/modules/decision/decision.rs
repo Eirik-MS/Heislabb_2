@@ -1,14 +1,10 @@
-mod common;
+use crate::modules::common::*;
 
-use common::*;
-
-use std::sync::Mutex;
 use std::sync::Arc;
-use elevator::Order;
-//use crate::elevator::{ElevatorState, Order}; //should map to my structs here?
 use crossbeam_channel as cbc; //for message passing
 use serde::Deserialize;
 use serde::Serialize;
+use serde_json::json;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::{ Instant};
@@ -67,14 +63,20 @@ pub enum Behaviour {
     doorOpen
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum OrderStatus { 
+    noorder, //false
+    requested, //false
+    confirmed, //true
+    completed //false
+}
 
 
-
-pub struct decision {
+pub struct Decision {
     //LOCAL
     local_id: String,
-    local_state: Arc<RwLock<ElevatorState>>, //contains cab orders too
     local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, // everything locally sent as heartbeat
+    dead_elev: std::collections::HashMap<String, bool>,
     //NETWORK CBC
     // network_elev_info_tx: cbc::Sender<BroadcastMessage>, 
     // network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
@@ -85,7 +87,7 @@ pub struct decision {
     elevator_assigned_orders_tx: mpsc::Sender<Order>, //one order only actually, s is typo
 }
 
-impl decision {
+impl Decision {
     pub fn new(
         local_id: String,
 
@@ -262,7 +264,6 @@ impl decision {
         println!("{}", serde_json::to_string_pretty(&input_json).unwrap());
 
         //2. use hall order assigner
-        let input_json = serde_json::to_string_pretty(&elevator_system).expect("Failed to serialize");
         let hra_output = Command::new("./hall_request_assigner")
         .arg("--input")
         .arg(&input_json)
@@ -273,14 +274,11 @@ impl decision {
         let mut new_orders: HashMap<String, Vec<Order>> = HashMap::new();
 
         if hra_output.status.success() {
-            hra_output_str = String::from_utf8(hra_output.stdout).expect("Invalid UTF-8 hra_output");
-            let hra_output = serde_json::from_str::<HashMap<String, Vec<Vec<bool>>>>(&hra_output_str)
+            let hra_output_str = String::from_utf8(hra_output.stdout)
+                .expect("Invalid UTF-8 hra_output");
+            
+            let hra_output: HashMap<String, Vec<Vec<bool>>> = serde_json::from_str(&hra_output_str)
                 .expect("Failed to deserialize hra_output");
-            //return decision::global_to_local(hra_output); //need to transofrm from vec vec bool to order
-        } else {
-            hra_output_str = "Error: Execution failed".to_string();
-            //return;
-        }
         
             for (elev_id, floors) in &hra_output {
                 println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
@@ -342,6 +340,4 @@ impl decision {
         }
 
     }
-
-        //uses functions above to coordinate the process     
-    }
+}
