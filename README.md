@@ -4,16 +4,18 @@
 To simply try a elevator the command ```cargo run ``` will compile the project and atempt to run it. To have a elevator that automaticly restarts then run the ```./run.sh``` shell script. 
 
 # Simple file structure:
+```
 project-root/
 ├── Cargo.toml
 ├── README.md
 ├── SimServer/
 │   ├── README.md
-│   ├── bin/             
+│   ├── SimElevatorServer             
 │   └── ...              
 ├── server_whf/
 │   ├── README.md
-│   ├── bin/             
+│   ├── server_whf
+│   ├── server_whf.d
 │   └── ...              
 ├── docs/
 │   └── README.md        
@@ -30,6 +32,7 @@ project-root/
         │   └── mod.rs
         └── network/
             └── mod.rs
+```
 
 # Setup in Lab:
 To generate a custom ssh-key and use the new passwordprotected key to push code to the server first run the keygen command: 
