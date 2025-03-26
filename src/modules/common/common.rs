@@ -83,6 +83,7 @@ pub struct ElevatorStatus {
     pub is_alive: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct AliveDeadInfo {
     pub elevators: HashMap<String, ElevatorStatus>,
     pub last_heartbeat: HashMap<String, Instant>,

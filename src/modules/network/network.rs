@@ -1,15 +1,11 @@
 
 use crate::modules::common::*;
-use std::net::{UdpSocket, IpAddr, Ipv4Addr,SocketAddrV4};
-use serde::{Serialize, Deserialize};
+use tokio::sync::mpsc::{Sender, Receiver};
+use std::net::{UdpSocket, Ipv4Addr,SocketAddrV4};
 use serde_json;
-use std::collections::{VecDeque, HashMap};
-use std::str;
-use std::hash::{Hash, Hasher};
 use local_ip_address::local_ip;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, Duration};
-use crossbeam_channel as cbc;
 use md5;
 
 //====GenerateIDs====//
@@ -38,7 +34,6 @@ pub fn UDPBroadcast(message: &BroadcastMessage){
 }
 
 //====ServerEnd====//
-
 pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
 
     let mut buffer = [0; 1024];
@@ -83,22 +78,25 @@ pub fn monitor_elevators(
                     alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
                 }
 
-                let now = Instant::now();
-                let mut to_remove = Vec::new();
-                
-                for (id, last_heartbeat) in &alive_dead_info.last_heartbeat {
+                let now = Instant::now();                
+                // Collect the ids that have expired
+                let expired_ids: Vec<_> = alive_dead_info.last_heartbeat
+                .iter()
+                .filter_map(|(id, last_heartbeat)| {
                     if now.duration_since(*last_heartbeat) > timeout_duration {
-                        
-                        alive_dead_info.update_elevator_status(id.clone(), false);
-                        to_remove.push(id.clone());
+                        Some(id.clone())
+                    } else {
+                        None
                     }
-                }
+                })
+                .collect();
 
-                decision_tx.send(alive_dead_info.clone()).expect("Failed to send data to decision thread");
-
-                for id in to_remove {
+                for id in expired_ids {
+                    alive_dead_info.update_elevator_status(id.clone(), false);
                     alive_dead_info.last_heartbeat.remove(&id);
                 }
+
+                decision_tx.send(alive_dead_info.clone());
             }
             None => {
                 continue;
