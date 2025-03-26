@@ -30,7 +30,7 @@ pub struct Decision {
     //LOCAL
     local_id: String,
     local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, // everything locally sent as heartbeat
-    dead_elev: std::collections::HashMap<String, bool>,
+    dead_elev: Arc<Mutex<std::collections::HashMap<String, bool>>>,
     //NETWORK CBC
     network_elev_info_tx: Mutex<mpsc::Sender<BroadcastMessage>>, 
     network_elev_info_rx: Mutex<mpsc::Receiver<BroadcastMessage>>,
@@ -58,7 +58,7 @@ impl Decision {
         Decision {
             local_id,
             local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::new(0))), //TODO: when empty?
-            dead_elev: std::collections::HashMap::new(), //std::collections::HashMap<String, bool>,
+            dead_elev: Arc::new(Mutex::new(std::collections::HashMap::new())), // wrap in Mutex
 
             network_elev_info_tx: Mutex::new(network_elev_info_tx),
             network_elev_info_rx: Mutex::new(network_elev_info_rx),
@@ -176,6 +176,7 @@ impl Decision {
             recvd_broadcast_message = network_elev_info_rx_guard.recv() => {
                 match recvd_broadcast_message {
                     Some(recvd) => {
+
                     }
                     None => {
                         println!("network_elev_info_rx channel closed.");
@@ -186,34 +187,60 @@ impl Decision {
             recvd_deadalive = network_alivedead_rx_guard.recv() => {
                 match recvd_deadalive {
                     Some(deadalive) => {
+                        //update local deadalive
+                        let mut dead_elev_guard = self.dead_elev.lock().await;
+                        let mut modified = false; 
+
+                        for (id, status) in deadalive.elevators {
+                            let entry = dead_elev_guard.entry(id.clone());
+                            
+                            match entry {
+                                std::collections::hash_map::Entry::Occupied(mut o) => {
+                                    if *o.get() != status.is_alive {
+                                        o.insert(status.is_alive); 
+                                        modified = true; 
+                                    }
+                                }
+                                std::collections::hash_map::Entry::Vacant(v) => {
+                                    v.insert(status.is_alive);
+                                    modified = true; 
+                                }
+                            }
+                        }
+                        
+                        if modified {
+                            self.hall_order_assigner(); 
+                        }
                     }
                     None => {
                         println!("network_alivedead_rx channel closed.");
                     }
                 }
             },
-
         }
 
         //check that we can move from requested to confirmed, if yes change status, call hall assigner, clean barrier (CAN THIS BE AN ISSUE?)
-        let alive_elevators: HashSet<String> = self
-            .dead_elev
-            .iter()
-            .filter(|(_, &is_dead)| !is_dead) // keep alive ones
+        let dead_elevators = self.dead_elev.lock().await;  // Lock the Mutex
+        let alive_elevators: HashSet<String> = dead_elevators.iter()
+            .filter(|(_, &is_alive)| is_alive)
             .map(|(id, _)| id.clone())
             .collect();
 
         let mut broadcast_msg = self.local_broadcastmessage.write().await;
+        let mut status_changed = false; //flag
 
         for (_elev_id, orders) in &mut broadcast_msg.orders {
             for order in orders.iter_mut() {
                 if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
                     order.status = OrderStatus::Confirmed;
                     order.barrier.clear();
+                    status_changed = true;
                 }
             }
         }
-        self.hall_order_assigner();
+        if status_changed {
+            self.hall_order_assigner();
+        }
 
         //check if we can move from finished to NoOrder, clean barrier
         for (_elev_id, orders) in &mut broadcast_msg.orders {
@@ -253,8 +280,9 @@ impl Decision {
             else idle
         */
         for (id, state) in &broadcast.states {
-            if let Some(true) = self.dead_elev.get(id) {
-                continue; // skip dead ones
+            let dead_elevators = self.dead_elev.lock().await;  
+            if let Some(true) = dead_elevators.get(id) {
+                continue;
             }
         
             let cab_requests: Vec<bool> = (1..=MAX_FLOORS) 
