@@ -1,30 +1,16 @@
-//When I wrote this code only God and I new what was going on, now only God knows
-use std::thread::*;
 use std::sync::Arc;
-
+use std::thread::spawn;
+use tokio::sync::mpsc::{Sender,Receiver};
 use tokio::time::{sleep, Duration};
 use tokio::sync::{Mutex, RwLock, mpsc};
+use std::collections::HashSet;
 
 use crossbeam_channel as cbc;
 
 use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
 
-struct ElevatorState {
-    current_floor: u8,
-    prev_floor: u8,
-    current_direction: u8,
-    prev_direction: u8,
-    emergency_stop: bool,
-    door_state: u8,
-}
-
-#[derive(Clone)] // Add Clone trait
-pub struct Order {
-    pub id: u32,
-    pub call: u8, //0, 1, 2 up dwon cab
-    pub floor: u8,
-}
+use crate::modules::common::*;
 
 pub struct ElevatorController {
 
@@ -47,11 +33,26 @@ pub struct ElevatorController {
     obstruction_btn_rx: cbc::Receiver<bool>,
     door_closing_tx: mpsc::Sender<bool>,
     door_closing_rx: Mutex<mpsc::Receiver<bool>>,
-    poll_period: std::time::Duration, 
+    poll_period: std::time::Duration,
+
+    new_orders_from_elevator_tx: Sender<Order>,
+    order_recived_and_confirmed_rx: Mutex<mpsc::Receiver<Order>>,
+    orders_completed_tx: Sender<u8>,
+    elevator_assigned_orders_rx: Mutex<mpsc::Receiver<Order>>,
+    elevator_state_tx: Sender<ElevatorState>,
 }
 
+// Implementation the ElevatorController
+
+
 impl ElevatorController {
-    pub async fn new(elev_num_floors: u8) -> std::io::Result<Arc<Self>>{
+    pub async fn new(elev_num_floors: u8, 
+                     new_orders_from_elevator_tx: Sender<Order>, 
+                     elevator_assigned_orders_rx: Receiver<Order>,
+                     orders_completed_tx: Sender<u8>,
+                     elevator_state_tx: Sender<ElevatorState>,
+                     orders_recived_completed_rx: Receiver<Order>) -> std::io::Result<Arc<Self>>{
+        //Create the channels not passed in by main:                
         let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
         let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
         let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
@@ -59,17 +60,21 @@ impl ElevatorController {
         let (door_closing_tx, door_closing_rx) = mpsc::channel(2);
 
         let controller = Arc::new(Self {
-            elevator: e::Elevator::init("localhost:15657", elev_num_floors)?,
+            elevator: e::Elevator::init("localhost:15657", elev_num_floors)?, 
             state: Arc::new(RwLock::new(ElevatorState {
                 current_floor: u8::MAX,
                 prev_floor: u8::MAX,
                 current_direction: e::DIRN_DOWN,
                 prev_direction: e::DIRN_STOP,
                 emergency_stop: false,
-                door_state: 0,
+                door_open: false,
             })),
-            queue: RwLock::new(Vec::<Order>::new()), // Initialize empty queue
+
+            queue: RwLock::new(Vec::<Order>::new()), 
             num_of_floors: elev_num_floors.clone(),
+            poll_period: Duration::from_millis(25),
+
+            //Assining the channels to the controller
             call_btn_tx: call_button_tx,
             call_btn_rx: call_button_rx,
             floor_sense_tx: floor_sensor_tx,
@@ -78,9 +83,15 @@ impl ElevatorController {
             stop_btn_rx: stop_button_rx,
             obstruction_btn_tx: obstruction_tx,
             obstruction_btn_rx: obstruction_rx,
+
+            //Assinging channels to coumicat with the decision module and itself
             door_closing_tx: door_closing_tx,
             door_closing_rx: Mutex::new(door_closing_rx),
-            poll_period: Duration::from_millis(25),
+            new_orders_from_elevator_tx: new_orders_from_elevator_tx,
+            elevator_assigned_orders_rx: Mutex::new(elevator_assigned_orders_rx),
+            order_recived_and_confirmed_rx: Mutex::new(orders_recived_completed_rx),
+            orders_completed_tx: orders_completed_tx,
+            elevator_state_tx: elevator_state_tx,
         });
         let poll_period = controller.poll_period.clone();
 
@@ -112,24 +123,30 @@ impl ElevatorController {
         Ok(controller)
     }
 
+
+    //Step function that will need to be run by the user of the module every time it should increment
     pub async fn step(&self) {
+        //---------------------------------------------
+        //Comunicate with the elevator low level driver.
         cbc::select! {
             recv(self.call_btn_rx) -> a => {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 
                 let order = Order {
-                    id: 0, 
                     call: call_button.call,
                     floor: call_button.floor,
+                    status: OrderStatus::Requested,
+                    barrier: HashSet::new(),
                 }; 
-                let mut elev_queue = self.queue.write().await;
-                elev_queue.push(order);
 
-                self.elevator.call_button_light(call_button.floor, call_button.call, true);
+                let _ = self.new_orders_from_elevator_tx.send(order).await;
+
             },
+
+            //Checks what floor we are at and if we compleate an order by stopping here.
             recv(self.floor_sense_rx) -> a => {
-                let floor = a.unwrap();
+                let floor: u8 = a.unwrap();
                 let mut state = self.state.write().await;
                 state.prev_floor = state.current_floor;
                 state.current_floor = floor;
@@ -139,11 +156,15 @@ impl ElevatorController {
                     queue.iter().any(|order| order.floor == floor)
                 };
             
+                //Check if the elevator should stop at the current floor and send message to the 
+                //decision module when the door opens
                 if should_stop {
                     self.elevator.motor_direction(e::DIRN_STOP);
                     state.prev_direction = state.current_direction;
                     state.current_direction = e::DIRN_STOP;
-                    
+
+                    self.remove_order(floor).await;
+                    //Start opening the door by sending a message over a mpsc channel
                     let door_closing_channel = self.door_closing_tx.clone();
                     self.open_door(door_closing_channel).await;
                     
@@ -159,12 +180,12 @@ impl ElevatorController {
             },
             recv(self.stop_btn_rx) -> a => {
                 let stop = a.unwrap();
+                let mut state = self.state.write().await;
+                state.emergency_stop = true;
+                state.current_direction = e::DIRN_STOP;
+                self.elevator.motor_direction(e::DIRN_STOP);
                 println!("Stop button: {:#?}", stop);
-                for f in 0..self.num_of_floors {
-                    for c in 0..3 {
-                        self.elevator.call_button_light(f, c, false);
-                    }
-                }
+                
             },
             recv(self.obstruction_btn_rx) -> a => {
                 let obstr = a.unwrap();
@@ -181,34 +202,64 @@ impl ElevatorController {
             },
         }
 
-        // Lock first to ensure the guard lives long enough
+        //------------------------------------------------------------------
+        // Lock first to ensure the guard lives long enough to be used
         let mut door_closing_rx_guard = self.door_closing_rx.lock().await;
-            
+        let mut elevator_assigned_orders_guard = self.elevator_assigned_orders_rx.lock().await;
+        let mut order_recived_and_confirmed_guard = self.order_recived_and_confirmed_rx.lock().await;
+
+        //Comunicate with other modules    
         tokio::select! {
             msg = door_closing_rx_guard.recv() => {
                 match msg {
                     Some(door_closing) => {
                         if door_closing {
                             let mut state_lock = self.state.write().await;
-                            state_lock.door_state = 0; // Door closed
+                            state_lock.door_open = false; // Door closed
                             self.elevator.door_light(false);
                             println!("Door has closed.");
                         }
                     }
                     None => {
-                        println!("door_closing_rx channel closed.");
+                        //println!("door_closing_rx channel closed.");
                     }
                 }
-            }
+            }, 
+            reciving_order = elevator_assigned_orders_guard.recv() => {
+                match reciving_order {
+                    Some(order) => {
+                        self.add_order(order).await;
+                    }
+                    None => {
+                        //println!("elevator_assigned_orders_rx channel closed.");
+                    }
+                }
+            }, 
+            reciving_confirmation = order_recived_and_confirmed_guard.recv() => {
+                match reciving_confirmation {
+                    Some(order) => {
+                        self.elevator.call_button_light(order.floor, order.call, true);
+                    }
+                    None => {
+                        //println!("order_recived_and_confirmed_rx channel closed.");
+                    }
+                }
+            },
         }
-        
+
+        //--------------------------------------------------------------------------------
+        //Elevator movment Logic
         let mut state = self.state.write().await;
+
         if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
-            if state.door_state == 1{
+            //If door is not open
+            if !state.door_open {
                 let order = self.queue.read().await[0].clone();
                  if order.floor == state.current_floor {
-                    //Open Door
-                    self.remove_order(order.id);
+                    
+                    let door_closing_channel = self.door_closing_tx.clone();
+                    self.open_door(door_closing_channel).await;
+                    self.remove_order(order.floor).await;
                     ()
                 } else if order.floor > state.current_floor {
                     self.elevator.motor_direction(e::DIRN_UP);
@@ -222,47 +273,64 @@ impl ElevatorController {
         //Maybe only change motor direcion her by using the state 
         //or the dirn variable
         //self.elevator.motor_direction(dirn);
+
+        //Send state data to other modules
+        let elevator_state_clone = self.state.read().await.clone(); 
+        self.elevator_state_tx.send(elevator_state_clone).await.unwrap();
     
     }
 
-    //Just use a timer and send a message over a mpscNUM_OF_FLOORS channel
+    //Just use a timer and send a message over a mpsc channel
     async fn open_door(&self, door_closing_tx: mpsc::Sender<bool>) {
         let mut state_lock = self.state.write().await;
-        state_lock.door_state = 1; // Door open
-        self.elevator.door_light(true);
+        state_lock.door_open = true; // Door open
+        self.elevator.door_light(state_lock.door_open);
         
         tokio::spawn(async move {
-            sleep(Duration::from_secs(4)).await;
+            sleep(Duration::from_secs(3)).await;
             let _ = door_closing_tx.send(true).await; // Send true when door closes
         });
     }
 
+    //Add an order to the queue
     pub async fn add_order(&self, order: Order) {
         let mut queue = self.queue.write().await;
         queue.push(order);
         println!("Order added to queue.");
     }
 
-    pub async fn remove_order(&self, order_id: u32) -> bool {
-        let pos = {
-            let queue = self.queue.read().await;
-            queue.iter().position(|order| order.id == order_id)
-        };
-    
-        if let Some(pos) = pos {
-            let mut queue = self.queue.write().await;
-            queue.remove(pos);
-            println!("Order with ID {} removed.", order_id);
+    //Remove orders from the queue by only keeping the orders that does NOT match the floor given.
+    pub async fn remove_order(&self, floor: u8) -> bool {
+        //Send compleated message after lock is achived to mitigate race conditions
+        let mut queue = self.queue.write().await;
+        let original_len = queue.len();
+        self.orders_completed_tx.send(floor).await.unwrap();
+
+        
+        queue.retain(|order| order.floor != floor);
+        
+        if queue.len() < original_len {
+            println!("All orders at floor {} removed.", floor);
             true
         } else {
-            println!("Order with ID {} not found.", order_id);
+            println!("No orders found at floor {}.", floor);
             false
         }
     }
-
-    pub async fn get_queue(&self) -> Vec<Order> {
-        let queue = self.queue.read().await;
-        queue.clone() // Returns a copy of the queue
-    }
 }
 
+async fn try_init_elevator(elev_num_floors: u8) -> e::Elevator {
+    let addr = "localhost:15657";
+    loop {
+        match e::Elevator::init(addr, elev_num_floors) {
+            Ok(elevator) => {
+                println!("Connected to elevator server at {}", addr);
+                break elevator;
+            }
+            Err(e) => {
+                println!("Server is not running: {}. Retrying in 3 seconds...", e);
+                sleep(Duration::from_secs(3)).await;
+            }
+        }
+    }
+}

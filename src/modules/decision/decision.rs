@@ -1,6 +1,6 @@
+use crate::modules::common::*;
+
 use std::sync::Arc;
-//use elevator::Order;
-//use crate::elevator::{ElevatorState, Order}; //should map to my structs here?
 use crossbeam_channel as cbc; //for message passing
 use serde::Deserialize;
 use serde::Serialize;
@@ -24,80 +24,9 @@ const MAX_FLOORS: usize = 4; //IMPORT FROM MAIN
 // TODO: maybe we need backup? maybe not
 
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
-pub struct BroadcastMessage {
-    pub orders: std::collections::HashMap<String, Vec<Order>>, 
-    pub states: std::collections::HashMap<String, ElevatorState>,
-}
-impl Default for BroadcastMessage {
-    fn default() -> Self {
-        BroadcastMessage {
-            orders: std::collections::HashMap::new(),
-            states: std::collections::HashMap::new(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone,)] 
-pub struct Order {
-    pub call: u8, // 0 - up, 1 - down, 2 - cab
-    pub floor: u8, //1,2,3,4
-    pub status: OrderStatus,
-    pub barrier: HashSet<String>, //barrier for requested->confirmed & confirmed->norder
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
-struct ElevatorState {
-    current_floor: u8, //fro exe: nonnegativeinteger
-    prev_floor: u8,
-    current_direction: u8, //direction - DIRN_DOWN, DIRN_UP, DIRN_STOP, //  < "up" | "down" | "stop" >
-    prev_direction: u8,
-    emergency_stop: bool,
-    door_open: bool, 
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum Behaviour {
-    idle,
-    moving,
-    doorOpen
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum OrderStatus { 
-    noorder, //false
-    requested, //false
-    confirmed, //true
-    completed //false
-}
 
 
-
-//MUST BE DELETED AFTER THIS COMPILES FULLY
-pub struct AliveDeadInfo {
-    pub elevators: HashMap<String, ElevatorStatus>,
-    pub last_heartbeat: HashMap<String, Instant>,
-}
-#[derive(Debug, Clone)]
-pub struct ElevatorStatus {
-    pub id: String,
-    pub is_alive: bool,
-}
-impl AliveDeadInfo {
-    pub fn new() -> Self {
-        AliveDeadInfo {
-            elevators: HashMap::new(),
-            last_heartbeat: HashMap::new(),
-        }
-    }
-
-    pub fn update_elevator_status(&mut self, id: String, is_alive: bool) {
-        self.elevators.insert(id.clone(), ElevatorStatus { id, is_alive });
-    }
-}
-
-
-pub struct decision {
+pub struct Decision {
     //LOCAL
     local_id: String,
     local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, // everything locally sent as heartbeat
@@ -113,7 +42,7 @@ pub struct decision {
     elevator_assigned_orders_tx: mpsc::Sender<Order>, //one order only actually, s is typo
 }
 
-impl decision {
+impl Decision {
     pub fn new(
         local_id: String,
 
@@ -126,7 +55,7 @@ impl decision {
         new_order_rx: Receiver<Order>,
         elevator_assigned_orders_tx: mpsc::Sender<Order>,
     ) -> Self {
-        decision {
+        Decision {
             local_id,
             local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::default())), //TODO: when empty?
             dead_elev: std::collections::HashMap::new(), //std::collections::HashMap<String, bool>,
@@ -208,9 +137,9 @@ impl decision {
                         if let Some(orders) = broadcast_message.orders.get_mut(&self.local_id) { //iterate my orders
                             for order in orders.iter_mut() {
                                 if order.floor == completed_floor { // everything for this floor
-                                    if order.status == OrderStatus::confirmed { //change status if confirmed to finished
+                                    if order.status == OrderStatus::Confirmed { //change status if confirmed to finished
 
-                                        order.status = OrderStatus::completed;
+                                        order.status = OrderStatus::Completed;
                                         order.barrier.clear(); //clear barrier just in case
                                         order.barrier.insert(self.local_id.clone());
                                     }
@@ -259,7 +188,7 @@ impl decision {
         //1.1 map hall orders
         for orders in broadcast.orders.values() {
             for order in orders {
-                if order.status == OrderStatus::confirmed && order.call < 2 {
+                if order.status == OrderStatus::Confirmed && order.call < 2 {
                     hall_requests[(order.floor - 1) as usize][order.call as usize] = true;
                 }
             }
@@ -281,7 +210,7 @@ impl decision {
             .map(|floor| {
                 broadcast.orders.values().any(|orders| {
                     orders.iter().any(|order| {
-                        order.floor as usize == floor && order.call == 2 && order.status == OrderStatus::confirmed
+                        order.floor as usize == floor && order.call == 2 && order.status == OrderStatus::Confirmed
                     })
                 })
             })
@@ -383,7 +312,7 @@ impl decision {
         //4. send order one by one to FSM
         for (_elevator_id, orders) in &broadcast.orders {
             for order in orders.iter() {
-                if order.status == OrderStatus::confirmed {
+                if order.status == OrderStatus::Confirmed {
                     if let Err(e) = self.elevator_assigned_orders_tx.send(order.clone()).await {
                         eprintln!("Failed to send confirmed order: {}", e);
                     }
