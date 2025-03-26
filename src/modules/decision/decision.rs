@@ -182,9 +182,11 @@ impl decision {
         let mut states = std::collections::HashMap::new();
 
         //1.1 map hall orders
-        for order in broadcast.orders.values() {
-            if order.status == OrderStatus::confirmed && order.call < 2 { 
-                hall_requests[(order.floor - 1) as usize][order.call as usize] = true;
+        for orders in broadcast.orders.values() {
+            for order in orders {
+                if order.status == OrderStatus::confirmed && order.call < 2 {
+                    hall_requests[(order.floor - 1) as usize][order.call as usize] = true;
+                }
             }
         }
 
