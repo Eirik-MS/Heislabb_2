@@ -24,52 +24,6 @@ const MAX_FLOORS: usize = 4; //IMPORT FROM MAIN
 // TODO: maybe we need backup? maybe not
 
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
-pub struct BroadcastMessage {
-    pub orders: std::collections::HashMap<String, Vec<Order>>, 
-    pub states: std::collections::HashMap<String, ElevatorState>,
-}
-impl Default for BroadcastMessage {
-    fn default() -> Self {
-        BroadcastMessage {
-            orders: std::collections::HashMap::new(),
-            states: std::collections::HashMap::new(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone,)] 
-pub struct Order {
-    pub call: u8, // 0 - up, 1 - down, 2 - cab
-    pub floor: u8, //1,2,3,4
-    pub status: OrderStatus,
-    pub barrier: HashSet<String>, //barrier for requested->confirmed & confirmed->norder
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
-struct ElevatorState {
-    current_floor: u8, //fro exe: nonnegativeinteger
-    prev_floor: u8,
-    current_direction: u8, //direction - DIRN_DOWN, DIRN_UP, DIRN_STOP, //  < "up" | "down" | "stop" >
-    prev_direction: u8,
-    emergency_stop: bool,
-    door_open: bool, 
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum Behaviour {
-    idle,
-    moving,
-    doorOpen
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum OrderStatus { 
-    noorder, //false
-    requested, //false
-    confirmed, //true
-    completed //false
-}
 
 
 pub struct Decision {
@@ -99,7 +53,7 @@ impl Decision {
         new_order_rx: Receiver<Order>,
         elevator_assigned_orders_tx: mpsc::Sender<Order>,
     ) -> Self {
-        decision {
+        Decision {
             local_id,
             local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::default())), //TODO: when empty?
             dead_elev: std::collections::HashMap::new(), //std::collections::HashMap<String, bool>,
@@ -207,7 +161,7 @@ impl Decision {
         //1.1 map hall orders
         for orders in broadcast.orders.values() {
             for order in orders {
-                if order.status == OrderStatus::confirmed && order.call < 2 {
+                if order.status == OrderStatus::Confirmed && order.call < 2 {
                     hall_requests[(order.floor - 1) as usize][order.call as usize] = true;
                 }
             }
@@ -229,7 +183,7 @@ impl Decision {
             .map(|floor| {
                 broadcast.orders.values().any(|orders| {
                     orders.iter().any(|order| {
-                        order.floor as usize == floor && order.call == 2 && order.status == OrderStatus::confirmed
+                        order.floor as usize == floor && order.call == 2 && order.status == OrderStatus::Confirmed
                     })
                 })
             })
@@ -331,7 +285,7 @@ impl Decision {
         //4. send order one by one to FSM
         for (_elevator_id, orders) in &broadcast.orders {
             for order in orders.iter() {
-                if order.status == OrderStatus::confirmed {
+                if order.status == OrderStatus::Confirmed {
                     if let Err(e) = self.elevator_assigned_orders_tx.send(order.clone()).await {
                         eprintln!("Failed to send confirmed order: {}", e);
                     }

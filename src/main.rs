@@ -9,6 +9,8 @@ use modules::network::*;
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
+use local_ip_address::local_ip;
+
 
 
 use tokio::sync::mpsc;
@@ -19,6 +21,10 @@ const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    // Get the local IP address
+    let elevator_id: String = local_ip().expect("Failed to get local IP address").to_string();
+    println!("Elevator ID: {}", elevator_id);
+
     // Setup channels, etc.
     let (new_orders_from_elevator_tx, new_orders_from_elevator_rx) = mpsc::channel(2);
     let (elevator_assigned_orders_tx, elevator_assigned_orders_rx) = mpsc::channel(2);
@@ -53,7 +59,7 @@ async fn main() -> std::io::Result<()> {
             new_orders_from_elevator_rx,
             elevator_assigned_orders_tx,
             //orders_confirmed_tx,
-        ).await.expect("Failed to create Decision");
+        );
         
         let mut interval = interval(UPDATE_INTERVAL);
         loop {

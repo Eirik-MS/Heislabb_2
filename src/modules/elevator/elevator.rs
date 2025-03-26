@@ -3,6 +3,7 @@ use std::thread::spawn;
 use tokio::sync::mpsc::{Sender,Receiver};
 use tokio::time::{sleep, Duration};
 use tokio::sync::{Mutex, RwLock, mpsc};
+use std::collections::HashSet;
 
 use crossbeam_channel as cbc;
 
@@ -59,7 +60,7 @@ impl ElevatorController {
         let (door_closing_tx, door_closing_rx) = mpsc::channel(2);
 
         let controller = Arc::new(Self {
-            elevator: try_init_elevator(elev_num_floors).await, 
+            elevator: e::Elevator::init("localhost:15657", elev_num_floors)?, 
             state: Arc::new(RwLock::new(ElevatorState {
                 current_floor: u8::MAX,
                 prev_floor: u8::MAX,
@@ -136,7 +137,7 @@ impl ElevatorController {
                     call: call_button.call,
                     floor: call_button.floor,
                     status: OrderStatus::Requested,
-                    aq_ids: Vec::<String>::new(),
+                    barrier: HashSet::new(),
                 }; 
 
                 let _ = self.new_orders_from_elevator_tx.send(order).await;

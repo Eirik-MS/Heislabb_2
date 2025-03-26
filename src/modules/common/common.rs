@@ -1,6 +1,8 @@
 use serde::{Serialize, Deserialize};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
+use std::collections::HashSet;
+
 
 
 pub const SYSTEM_ID: &str = "Delulu";
@@ -23,7 +25,7 @@ pub struct Order {
     pub call: u8, // 0 - up, 1 - down, 2 - cab
     pub floor: u8, //1,2,3,4
     pub status: OrderStatus,
-    pub aq_ids: Vec<String>, //barrier for requested->confirmed & confirmed->norder
+    pub barrier: HashSet<String>, //barrier for requested->confirmed & confirmed->norder
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -39,16 +41,16 @@ pub enum OrderStatus {
 pub struct BroadcastMessage {
     pub source_id: String,
     pub version: u64, //like order ID but for the whole broadcast message
-    pub hallRequests: std::collections::HashMap<String, Vec<HallOrder>>, //elevID, hallOrders
+    pub orders: std::collections::HashMap<String, Vec<Order>>, //elevID, hallOrders
     pub states: std::collections::HashMap<String, ElevatorState> //same as in elevator system
 }
 
 impl BroadcastMessage {
-    pub fn new(version: u64) -> self {
+    pub fn new(version: u64) -> Self {
         BroadcastMessage {
             source_id: String::from(SYSTEM_ID),
-            version,
-            hallRequests: std:.collections::HashMap::new(),
+            version : version,
+            orders: HashMap::new(),
             states: std::collections::HashMap::new(),
         }
     }
@@ -98,4 +100,3 @@ impl AliveDeadInfo {
         self.elevators.insert(id.clone(), ElevatorStatus { id, is_alive });
     }
 }
-
