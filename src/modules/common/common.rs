@@ -1,6 +1,11 @@
 use serde::{Serialize, Deserialize};
 
 
+pub const SYSTEM_ID: &str = "Elevator A";
+pub const NUM_OF_FLOORS:u8 = 4;
+pub const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
+
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
 pub struct ElevatorState {
     pub current_floor: u8,
