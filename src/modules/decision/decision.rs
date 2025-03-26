@@ -13,8 +13,10 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 use std::time::{Duration, Instant};
 use std::process::{Command, Stdio};
-const MAX_FLOORS: usize = 4;
-
+use tokio::time::{sleep, Duration};
+use tokio::sync::{Mutex, RwLock, mpsc};
+use driver_rust::elevio::elev as e;
+const MAX_FLOORS: usize = 4; //IMPORT FROM MAIN
 // All peers supposed to have:
 // list of elevator states
 // list of orders --> needs more states such as new, in process, finished
@@ -22,63 +24,56 @@ const MAX_FLOORS: usize = 4;
 // honestly the only reason we transfer cab orders globally is to use executable
 // otherwise they are managed locally since other elevators are not modifying or
 // taking over them, if elev dies, cab orders die too... 
-// TODO: maybe we need backup?
+// TODO: maybe we need backup? maybe not
 
-// TODO 1: change cbc to mpsc from tokio
-// TODO 2: tokio OneShot for state communication between me and elevator
 
-//******************** LOCAL STRUCTS ********************//
-#[derive(Serialize, Deserialize, Debug, Clone)] 
-pub struct ElevatorSystem { //very local, basically only for order assigner executable
-    pub hallRequests: Vec<Vec<bool>>, //ex.: [[false, false], [true, false], [false, false], [false, true]] ALL HALL REQUESTS MAPPED FROM GLOBAL QUEUE
-    pub states: std::collections::HashMap<String, ElevatorState>, //all elev states
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ElevatorState { //if I receive smthing different should map it to this for executable
-    pub behaviour: Behaviour,  // < "idle" | "moving" | "doorOpen" >
-    pub floor: u8,         // NonNegativeInteger
-    pub direction: Directions, //  < "up" | "down" | "stop" >
-    pub cabRequests: Vec<bool>, // [false,false,false,false] LOCAL
-    #[serde(skip)]
-    pub last_seen: Option<Instant>, //for the timeout, more than 5 secs?
-    #[serde(skip)]
-    pub dead: bool, //
-}
-
-//************ GLOBAL STRUCT ****************************//
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
 pub struct BroadcastMessage {
-    pub hallRequests: std::collections::HashMap<String, Vec<HallOrder>>, //elevID, hallOrders
-    pub states: std::collections::HashMap<String, ElevatorState> //same as in elevator system
+    pub orders: std::collections::HashMap<String, Vec<Order>>, 
+    pub states: std::collections::HashMap<String, ElevatorState>,
+}
+impl Default for BroadcastMessage {
+    fn default() -> Self {
+        BroadcastMessage {
+            orders: std::collections::HashMap::new(),
+            states: std::collections::HashMap::new(),
+        }
+    }
 }
 
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Directions {
-    up,
-    down,
-    stop
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone,)] 
+pub struct Order {
+    pub call: u8, // 0 - up, 1 - down, 2 - cab
+    pub floor: u8, //1,2,3,4
+    pub status: OrderStatus,
+    pub aq_ids: Vec<String>, //barrier for requested->confirmed & confirmed->norder
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
+struct ElevatorState {
+    current_floor: u8, //fro exe: nonnegativeinteger
+    prev_floor: u8,
+    current_direction: u8, //direction - DIRN_DOWN, DIRN_UP, DIRN_STOP, //  < "up" | "down" | "stop" >
+    prev_direction: u8,
+    emergency_stop: bool,
+    door_open: bool, 
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum Behaviour {
     idle,
     moving,
     doorOpen
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum OrderStatus { //like a counter, only goes in one direction!
-    norder, //false, default state, could be assigned by executable
-    initiated, //true - accept (up or down was pressed), added when button is pressed
-    assigned, //true - reject, by executable
-    completed //for deletion, needs to be acknowledged by (not dead) Id1, Id2, Id2... TODO-> add extra logic
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum OrderStatus { 
+    noorder, //false
+    requested, //false
+    confirmed, //true
+    completed //false
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct HallOrder {
-    orderId: String, //do I need this???
-    status: OrderStatus,
-    floor: u8,
-    direction: bool //0 up, 1 down (or somthing similar)
-}
+
 
 pub struct decision {
     //LOCAL
@@ -90,91 +85,137 @@ pub struct decision {
     network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
     //OTEHRS/UNSURE
     new_elev_state_rx: cbc::Receiver<ElevatorState>, //state to modify
-  //  new_elev_state_tx: cbc::Receiver<ElevatorState>, //when updated send back to fsm
-    order_completed_rx: cbc::Receiver<bool>, //trigger for order state transition
-    new_order_rx: cbc::Receiver<Order> //should be mapped to cab or hall orders (has id, call, floor), needs DIR
-    //TODO: cab and hall orders sent to elevator
+    order_completed_rx: cbc::Receiver<u8>, //elevator floor
+    new_order_rx: cbc::Receiver<Order>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
+    elev_orders_tx: cbc::Sender<std::collections::HashMap<String, Order>>,
 }
 
 impl decision {
     pub fn new(
         local_id: String,
-        local_state: Arc<RwLock<ElevatorState>>, // DELETE THIS, same info down there anyway
-        local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, //INSIDE
-        //do we need to have self hall requests or fuck it since we receive them from network_elev_info_rx
+
         network_elev_info_tx: cbc::Sender<BroadcastMessage>,
         network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
 
         new_elev_state_rx: cbc::Receiver<ElevatorState>,
    //     new_elev_state_tx: cbc::Receiver<ElevatorState>,
-        order_completed_rx: cbc::Receiver<bool>,
+        order_completed_rx: cbc::Receiver<u8>,
         new_order_rx: cbc::Receiver<Order>,
+        elev_orders_tx: cbc::Sender<std::collections::HashMap<String, Order>>,
     ) -> Self {
         decision {
             local_id,
-            local_state,
-            local_broadcastmessage,
+            local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::default())),
+            dead_elev: std::collections::HashMap::new(), //std::collections::HashMap<String, bool>,
 
             network_elev_info_tx,
             network_elev_info_rx,
 
             new_elev_state_rx,
-    //        new_elev_state_tx,
             order_completed_rx,
             new_order_rx,
         }
     }
 
-    pub fn elev_state_update(&mut self, new_state: ElevatorState, elev_id: String) {
-        //updates the state of the elevator based on its id
-        //removes timed-out elevator - reassigns its orders to the remaining elevators
-        //if elevator was dead and appeared - need reassign all orders again?
+    pub async fn step(& self) { 
+        // cbc::select! {
 
-    }
+        //     recv(self.network_elev_info_rx) -> package => {
+        //         let received_BM = package.unwrap();
+        //         //update current broadcast message
+                
+        //         let mut broadcast = self.local_broadcastmessage.write().await;
+        //         if (received_BM.version > broadcast.version) {
+        //             broadcast.version = received_BM.version;
+        //             broadcast.hallRequests = received_BM.hallRequests;
+        //             broadcast.states = received_BM.states;
 
-    pub fn new_hall_order() {
-        //supposedly updates hallOrders in elevatorSystem struct
-    }
+        //             self.hall_order_assigner(); //reorder
+        //         }
+        //         else { /*REJECTING - older versions, do nothing*/}
+                
+        //     },
 
-    pub fn new_cab_order() {
-        //updates cab orders in local_state of the elevator 
-    }
+        //     recv(self.new_elev_state_rx) -> package => {
+        //         let received_elev_state = package.unwrap();
 
-    pub fn order_completed() {
-        //deals with completed orders
-        //supposedly removes them from the local cab orders
-        //but also from the global hall queue... how?
+        //         let mut broadcast = self.local_broadcastmessage.write().await;
+        //         // modify the state of the current elevator and reassign orders:
+
+        //         self.hall_order_assigner();
+
+        //     },
+
+        //     recv(self.new_order_rx) -> package => {},
+
+        //     recv(self.order_completed_rx) -> package => {},
+
+        // }
     }
 
     pub async fn hall_order_assigner(&self) {
         //1. map broadcast Message to Elevator system struct
         //take even dead elevators? and then reassign orders
         //status assigned stays but elevators take possibly diff orders
-        let broadcast = self.local_broadcastmessage.read().await;
-
-        let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
+        let mut broadcast = self.local_broadcastmessage.write().await;
         
-        for (_id, orders) in &broadcast.hallRequests {
-            for order in orders {
-                let floor_index = order.floor as usize;
-                if order.direction {
-                    hall_requests[floor_index][1] = true;
-                } else {
-                    hall_requests[floor_index][0] = true;
-                }
+        let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
+        let mut states = std::collections::HashMap::new();
+
+        //1.1 map hall orders
+        for order in broadcast.orders.values() {
+            if order.status == OrderStatus::confirmed && order.call < 2 { 
+                hall_requests[(order.floor - 1) as usize][order.call as usize] = true;
             }
         }
-        
-        let elevator_system = ElevatorSystem {
-            hallRequests: hall_requests,
-            states: broadcast.states
-            .iter()
-            .filter(|(_, state)| !state.dead) // exclude dead ones so we get their orders but not them
-            .map(|(id, state)| (id.clone(), state.clone()))
-            .collect(),
-        };
 
-        println!("{:?}", elevator_system); //for debuggin
+        /*
+            if state.direction != stop 
+                state = moving
+            if state.dooropen 
+                state dorropen
+            else idle
+        */
+        for (id, state) in &broadcast.states {
+            if let Some(true) = self.dead_elev.get(id) {
+                continue; // skip dead ones
+            }
+        
+            let cab_requests: Vec<bool> = (1..=MAX_FLOORS) 
+                .map(|floor| {
+                    broadcast.orders.values().any(|order| {
+                        (order.floor as usize) == floor && order.call == 2 && order.status == OrderStatus::confirmed
+                    })
+                })
+                .collect();
+        
+            let behaviour = if state.door_open {
+                "doorOpen"
+            } else if state.current_direction != e::DIRN_STOP { 
+                "moving"
+            } else {
+                "idle"
+            };
+        
+            states.insert(id.clone(), serde_json::json!({
+                "behaviour": behaviour,
+                "floor": state.current_floor,
+                "direction": match state.current_direction {
+                    e::DIRN_DOWN => "down",
+                    e::DIRN_UP => "up",
+                    _ => "stop",
+                },
+                "cabRequests": cab_requests
+            }));
+        }
+
+        //1.3 create merged json
+        let input_json = serde_json::json!({
+            "hallRequests": hall_requests,
+            "states": states
+        }).to_string();
+        
+        println!("{}", serde_json::to_string_pretty(&input_json).unwrap());
 
         //2. use hall order assigner
         let input_json = serde_json::to_string_pretty(&elevator_system).expect("Failed to serialize");
@@ -196,67 +237,56 @@ impl decision {
             //return;
         }
         
-        println!("Response from executable good: {}", hra_output_str);
-        
-
-        // 3. update local broadcast message according to the return value of executable - hra_output
-        // IMPORTANT false (no order) ones are also added to the queue, 
-        // true orders (supposedly the ones that were added from button press) should change status initiated -> assigned
-        for (elev_id, floors) in hra_output.iter() {
-            let mut hall_orders = Vec::new();
-
-            for (floor, buttons) in floors.iter().enumerate() {
-                let existing_orders = broadcast
-                    .hallRequests
-                    .(<String>)get(elev_id)
-                    .unwrap_or(&Vec::new())
-                    .iter()
-                    .filter(|o| o.floor == floor as u8) 
-                    .map(|o| (o.direction, o.status.clone())) 
-                    .collect::<Vec<_>>();
-
-                // orders that go up
-                let up_status = if buttons[0] {
-                    // ff was initiated, go to assigned, if not keep same
-                    existing_orders.iter()
-                        .find(|(dir, _)| !dir) 
-                        .map(|(_, status)| if *status == OrderStatus::initiated { OrderStatus::assigned } else { status.clone() })
-                        .unwrap_or(OrderStatus::initiated)
-                } else {
-                    // if no order: default if norder
-                    OrderStatus::norder
-                };
-
-                hall_orders.push(HallOrder {
-                    orderId: format!("{}_{}_up", elev_id, floor),
-                    status: up_status,
-                    floor: floor as u8,
-                    direction: false, // Up
-                });
-
-                // orders that go down
-                let down_status = if buttons[1] {
-                    existing_orders.iter()
-                        .find(|(dir, _)| *dir)
-                        .map(|(_, status)| if *status == OrderStatus::initiated { OrderStatus::assigned } else { status.clone() })
-                        .unwrap_or(OrderStatus::initiated)
-                } else {
-                    OrderStatus::norder
-                };
-
-
-                hall_orders.push(HallOrder {
-                    orderId: format!("{}_{}_down", elev_id, floor),
-                    status: down_status,
-                    floor: floor as u8,
-                    direction: true, // down
-                });
+            for (elev_id, floors) in &hra_output {
+                println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
             }
+        }
+        // 3. update local broadcast message according to the return value of executable - hra_output
+        let mut new_orders: HashMap<String, Vec<Order>> = HashMap::new();
 
-            broadcast.hallRequests.insert(elev_id.clone(), hall_orders);
+        for (new_elevator_id, orders) in &hra_output {
+            for (floor_index, buttons) in orders.iter().enumerate() {
+                let floor = (floor_index + 1) as u8; 
+                for (call_type, &is_confirmed) in buttons.iter().enumerate() { //call type can only be either 0 or 1 (up, down)
+                    if is_confirmed { //true e. i. there is an order
+                        let call = call_type as u8; 
+
+                        let mut found_order: Option<Order> = None;
+                        let mut previous_elevator_id: Option<String> = None;
+
+                        for (elevator_id, orders) in broadcast.orders.iter_mut() {
+                            if let Some(order) = orders.iter_mut().find(|order| order.floor == floor && order.call == call) {
+                                found_order = Some(order.clone());
+                                previous_elevator_id = Some(elevator_id.clone());
+                                break;
+                            }
+                        }
+        
+                        if let Some(order) = found_order {
+                            if let Some(prev_id) = previous_elevator_id {
+                                if let Some(prev_orders) = broadcast.orders.get_mut(&prev_id) {
+                                    if let Some(pos) = prev_orders.iter().position(|x| x == &order) {
+                                        prev_orders.remove(pos);
+                                    }
+                                }
+                            }
+        
+                            new_orders.entry(new_elevator_id.clone())
+                                .or_default()
+                                .push(order);
+                        }
+                    }
+                }
+            }
+        }
+        
+        for (elevator_id, orders) in new_orders {
+            for order in orders {
+                broadcast.orders.entry(elevator_id.clone()).or_default().push(order);
+            }
         }
 
-        println!("{:?}", broadcast.hallRequests); 
+        //TODO: send order queue to FSM
     }
 
         //uses functions above to coordinate the process     
