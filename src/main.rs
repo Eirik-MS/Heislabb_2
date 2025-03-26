@@ -12,59 +12,61 @@ use serde::{Deserialize, Serialize};
 
 
 use tokio::sync::mpsc;
-use tokio::time::{sleep, Duration};
+use tokio::time::{interval, Duration};
 
 const NUM_OF_FLOORS:u8 = 4;
 const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 
-
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    
-    // Create channels for communication between the elevator controller and the decision thread
+    // Setup channels, etc.
     let (new_orders_from_elevator_tx, new_orders_from_elevator_rx) = mpsc::channel(2);
     let (elevator_assigned_orders_tx, elevator_assigned_orders_rx) = mpsc::channel(2);
-    let (orders_compleated_tx, orders_compleated_rx) = mpsc::channel(2);
+    let (orders_completed_tx, orders_completed_rx) = mpsc::channel(2);
     let (elevator_state_tx, elevator_state_rx) = mpsc::channel(2);
     let (orders_confirmed_tx, orders_confirmed_rx) = mpsc::channel(2);
 
+    // Spawn elevator task
+    let elevator_handle = tokio::spawn(async move {
+        let elev_ctrl: std::sync::Arc<ElevatorController> = ElevatorController::new(
+            NUM_OF_FLOORS,
+            new_orders_from_elevator_tx,
+            elevator_assigned_orders_rx,
+            orders_completed_tx,
+            elevator_state_tx,
+            orders_confirmed_rx,
+        ).await.expect("Failed to create ElevatorController");
 
-
-    // Spawn a separate thread to run the elevator logic
-    let elevator_handle = tokio::task::spawn_blocking(move || {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async move {
-            let elev_ctrl: std::sync::Arc<ElevatorController> = ElevatorController::new(NUM_OF_FLOORS, 
-                                                                                        new_orders_from_elevator_tx, 
-                                                                                        elevator_assigned_orders_rx, 
-                                                                                        orders_compleated_tx, 
-                                                                                        elevator_state_tx, 
-                                                                                        orders_confirmed_rx).await.unwrap();
-            loop {
-                elev_ctrl.step().await;
-                std::thread::sleep(UPDATE_INTERVAL);
-            }
-        });
+        let mut interval = interval(UPDATE_INTERVAL);
+        loop {
+            interval.tick().await;
+            elev_ctrl.step().await;
+        }
     });
 
-    // Spawn a separate thread to run the decision logic    
-    let decision_handle = tokio::task::spawn_blocking(move || {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async move {
-
-            let decision = Decision::new(system_id, 
-                                         elevator_state_rx, 
-                                         orders_compleated_rx, 
-                                         new_orders_from_elevator_rx, 
-                                         elevator_assigned_orders_tx, 
-                                         orders_confirmed_tx).await.unwrap();
-            loop {
-                decision.step().await;
-                std::thread::sleep(UPDATE_INTERVAL);
-            }
-        });
+    // Spawn decision task
+    let decision_handle = tokio::spawn(async move {
+        let decision = Decision::new(
+            system_id,
+            elevator_state_rx,
+            orders_completed_rx,
+            new_orders_from_elevator_rx,
+            elevator_assigned_orders_tx,
+            orders_confirmed_tx,
+        ).await.expect("Failed to create Decision");
+        
+        let mut interval = interval(UPDATE_INTERVAL);
+        loop {
+            interval.tick().await;
+            decision.step().await;
+        }
     });
 
-
-    Ok(()) 
+    // Optionally await both handles or run other tasks
+    // For example, you can await one of them or use join! macro if they need to run concurrently.
+    // Here we simply await the elevator_handle for demonstration.
+    elevator_handle.await?;
+    decision_handle.await?;
+    
+    Ok(())
 }
