@@ -37,6 +37,7 @@ pub fn UDPBroadcast(message: &BroadcastMessage){
 //====ServerEnd====//
 
 pub fn UDPlistener() -> Option<BroadcastMessage>{
+
     let socket = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
 
     println!("UDP listening on port 30000");
@@ -52,6 +53,11 @@ pub fn UDPlistener() -> Option<BroadcastMessage>{
             return None;
         }
     };
+
+    if message.source_id != SYSTEM_ID {
+        println!("Received message from unexpectrd peer: {}", message.source_id);
+        return None;
+    }
 
     Some(message)
 }

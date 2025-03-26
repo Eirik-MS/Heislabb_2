@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 
 
-pub const SYSTEM_ID: &str = "Elevator A";
+pub const SYSTEM_ID: &str = "Delulu";
 pub const NUM_OF_FLOORS:u8 = 4;
 pub const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 
@@ -34,7 +34,7 @@ pub enum OrderStatus {
 
 // struct ElevatorState {
 //     current_floor: u8,
-//     prev_floor: u8,
+//     prev_floor: u8,sou
 //     current_direction: u8,
 //     prev_direction: u8,
 //     emergency_stop: bool,
@@ -42,10 +42,24 @@ pub enum OrderStatus {
 // }
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)] 
 pub struct BroadcastMessage {
+    pub source_id: String;
     pub version: u64, //like order ID but for the whole broadcast message
     pub hallRequests: std::collections::HashMap<String, Vec<HallOrder>>, //elevID, hallOrders
     pub states: std::collections::HashMap<String, ElevatorState> //same as in elevator system
 }
+
+impl BroadcastMessage {
+    pub fn new(version: u64) -> self {
+        BroadcastMessage {
+            source_id: String::from(SYSTEM_ID),
+            version,
+            hallRequests: std:.collections::HashMap::new(),
+            states: std::collections::HashMap::new(),
+        }
+    }
+}
+
+
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
 pub struct ElevatorSystem { //very local, basically only for order assigner executable
