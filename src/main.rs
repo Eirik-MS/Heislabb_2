@@ -1,25 +1,18 @@
-mod modules{
-    pub mod decision;
-    pub mod elevator;
-}
+
+mod modules;
+
+use modules::common::*;
+use modules::elevator::*;
+use modules::decision::*;
+use modules::network::*;
 
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
 
-use modules::decision::ElevatorState;
-use modules::decision::Behaviour;
-use modules::decision::Directions;
-//use std::sync::{Arc, Mutex};
-use std::thread;
-use tokio::runtime::Runtime;
-// use elevator::ElevatorController;
-// use network_rust::udpnet;
-use std::sync::Arc;
-use tokio::sync::Notify;
-use tokio::time::{sleep, Duration};
-use modules::elevator::ElevatorController;
 
+use tokio::sync::mpsc;
+use tokio::time::{sleep, Duration};
 
 const NUM_OF_FLOORS:u8 = 4;
 const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
@@ -48,7 +41,7 @@ async fn main() -> std::io::Result<()> {
             }
         });
     });
-
+    /*
 
     // Construct test JSON data
     let mut states = HashMap::new();
@@ -72,7 +65,7 @@ async fn main() -> std::io::Result<()> {
         },
     );
 
-    /*
+    
     let system = ElevatorSystem {
         hallRequests: vec![
             vec![false, false],
@@ -81,7 +74,7 @@ async fn main() -> std::io::Result<()> {
             vec![false, true],
         ],
         states,
-    };*/
+    };
 
     Ok(elevator_handle.await?);
     // Serialize JSON
