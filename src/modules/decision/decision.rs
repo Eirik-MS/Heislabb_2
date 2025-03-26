@@ -54,10 +54,10 @@ pub struct ElevatorState { //if I receive smthing different should map it to thi
     pub floor: u8,         // NonNegativeInteger
     pub direction: Directions, //  < "up" | "down" | "stop" >
     pub cabRequests: Vec<bool>, // [false,false,false,false] LOCAL
-    #[serde(skip)]
-    pub last_seen: Option<Instant>, //for the timeout, more than 5 secs?
-    #[serde(skip)]
-    pub dead: bool, 
+    // #[serde(skip)]
+    // pub last_seen: Option<Instant>, //for the timeout, more than 5 secs?
+    // #[serde(skip)]
+    // pub dead: bool, 
 }
 impl Default for ElevatorState {
     fn default() -> Self {
@@ -66,8 +66,8 @@ impl Default for ElevatorState {
             floor: 1,                     
             direction: Directions::stop,   
             cabRequests: vec![false; 4],  
-            last_seen: None,             
-            dead: false,                 
+            // last_seen: None,             
+            // dead: false,                 
         }
     }
 }
@@ -102,25 +102,23 @@ pub enum CallFrom {
 pub struct decision {
     //LOCAL
     local_id: String,
-    local_state: Arc<RwLock<ElevatorState>>, //contains cab orders too
     local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, // everything locally sent as heartbeat
+    dead_elev: std::collections::HashMap<String, bool>,
     //NETWORK CBC
     network_elev_info_tx: cbc::Sender<BroadcastMessage>, 
     network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
     //OTEHRS/UNSURE
     new_elev_state_rx: cbc::Receiver<ElevatorState>, //state to modify
-  //  new_elev_state_tx: cbc::Receiver<ElevatorState>, //when updated send back to fsm
     order_completed_rx: cbc::Receiver<bool>, //trigger for order state transition
     new_order_rx: cbc::Receiver<Order>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
-    //TODO: cab and hall orders sent to elevator
     elev_orders_tx: cbc::Sender<Vec<Order>>,
 }
 
 impl decision {
     pub fn new(
         local_id: String,
-        local_state: Arc<RwLock<ElevatorState>>, // DELETE THIS, same info down there anyway
         local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, //INSIDE
+        dead_elev: std::collections::HashMap<String, bool>,
         //do we need to have self hall requests or fuck it since we receive them from network_elev_info_rx
         network_elev_info_tx: cbc::Sender<BroadcastMessage>,
         network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
@@ -133,8 +131,8 @@ impl decision {
     ) -> Self {
         decision {
             local_id,
-            local_state: Arc::new(RwLock::new(ElevatorState::default())), 
             local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::default())),
+            dead_elev,
 
             network_elev_info_tx,
             network_elev_info_rx,
@@ -147,12 +145,13 @@ impl decision {
         }
     }
 
-    pub async fn step(&mut self) { 
+    pub async fn step(& self) { 
         cbc::select! {
 
             recv(self.network_elev_info_rx) -> package => {
                 let received_BM = package.unwrap();
                 //update current broadcast message
+                
                 let mut broadcast = self.local_broadcastmessage.write().await;
                 if (received_BM.version > broadcast.version) {
                     broadcast.version = received_BM.version;
@@ -161,42 +160,43 @@ impl decision {
 
                     self.hall_order_assigner(); //reorder
                 }
-                else { /*REJECTING - older versions*/}
+                else { /*REJECTING - older versions, do nothing*/}
+                
             },
 
             recv(self.new_elev_state_rx) -> package => {},
 
-            recv(self.new_order) -> package => {},
+            recv(self.new_order_rx) -> package => {},
 
             recv(self.order_completed_rx) -> package => {},
 
         }
     }
 
-    pub fn elev_state_update(&mut self) { //FSM
-        //receives from the FSM updates state calls order assigner
+    // pub fn elev_state_update(&mut self) { //FSM
+    //     //receives from the FSM updates state calls order assigner
 
-    }
+    // }
 
-    pub fn new_order() { //FSM
+    // pub fn new_order() { //FSM
 
-        //supposedly updates hallOrders in elevatorSystem struct
-        //updates cab orders in local_state of the elevator 
-    }
+    //     //supposedly updates hallOrders in elevatorSystem struct
+    //     //updates cab orders in local_state of the elevator 
+    // }
 
-    pub fn order_completed() { //FSM
-        //deals with completed orders
-        //supposedly removes them from the local cab orders
-        //but also from the global hall queue... how?
-    }
+    // pub fn order_completed() { //FSM
+    //     //deals with completed orders
+    //     //supposedly removes them from the local cab orders
+    //     //but also from the global hall queue... how?
+    // }
 
-    pub fn handle_timeout() { //based on NETWORK
-        //needs to handle lost elevators
-        //additionally new elevators
-        //upduate the broadcast message and call hall assigner to fix stuff
-    }
+    // pub fn handle_timeout() { //based on NETWORK
+    //     //needs to handle lost elevators
+    //     //additionally new elevators
+    //     //upduate the broadcast message and call hall assigner to fix stuff
+    // }
 
-    pub async fn hall_order_assigner(&mut self) { //check if mut is needed here
+    pub async fn hall_order_assigner(& self) { //check if mut is needed here
         //1. map broadcast Message to Elevator system struct
         //take even dead elevators? and then reassign orders
         //status assigned stays but elevators take possibly diff orders
@@ -204,7 +204,6 @@ impl decision {
 
         let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
         //1.1 map hall orders
-        //todo: filter out dead elevators
         for (_id, orders) in &broadcast.hallRequests {
             for order in orders {
                 let floor_index = order.floor.saturating_sub(1); //substracts apparently good
@@ -222,7 +221,9 @@ impl decision {
         }
         
         //1.2 mapp states
-        let states = broadcast.states.iter().map(|(id, state)| {
+        let states = broadcast.states.iter()
+        .filter(|(id, _)| !self.dead_elev.get(*id).copied().unwrap_or(false)) //dead elevators shouldnt be considered
+        .map(|(id, state)| {
             (
                 id.clone(),
                 json!({
