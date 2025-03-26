@@ -34,71 +34,37 @@ async fn main() -> std::io::Result<()> {
     let elevator_handle = tokio::task::spawn_blocking(move || {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async move {
-            let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS, new_orders_from_elevator_tx, elevator_assigned_orders_rx, orders_compleated_tx, elevator_state_tx, orders_confirmed_rx).await.unwrap();
+            let elev_ctrl: std::sync::Arc<ElevatorController> = ElevatorController::new(NUM_OF_FLOORS, 
+                                                                                        new_orders_from_elevator_tx, 
+                                                                                        elevator_assigned_orders_rx, 
+                                                                                        orders_compleated_tx, 
+                                                                                        elevator_state_tx, 
+                                                                                        orders_confirmed_rx).await.unwrap();
             loop {
                 elev_ctrl.step().await;
                 std::thread::sleep(UPDATE_INTERVAL);
             }
         });
     });
-    /*
 
-    // Construct test JSON data
-    let mut states = HashMap::new();
-    states.insert(
-        "one".to_string(),
-        ElevatorState {
-            behaviour: Behaviour::moving,
-            floor: 2,
-            direction: Directions::up,
-            cabRequests: vec![false, false, true, true],
-        },
-    );
+    // Spawn a separate thread to run the decision logic    
+    let decision_handle = tokio::task::spawn_blocking(move || {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async move {
 
-    states.insert(
-        "two".to_string(),
-        ElevatorState {
-            behaviour: Behaviour::idle,
-            floor: 0,
-            direction: Directions::stop,
-            cabRequests: vec![false, false, false, false],
-        },
-    );
-
-    
-    let system = ElevatorSystem {
-        hallRequests: vec![
-            vec![false, false],
-            vec![true, false],
-            vec![false, false],
-            vec![false, true],
-        ],
-        states,
-    };
-
-    Ok(elevator_handle.await?);
-    // Serialize JSON
-    //let input_json = serde_json::to_string_pretty(&system).expect("Failed to serialize");
-    let hra_output = Command::new("./src/modules/decision/hall_request_assigner")
-    .arg("--input")
-    .arg(&input_json)
-    .output()
-    .expect("Failed to execute hall_request_assigner");
+            let decision = Decision::new(system_id, 
+                                         elevator_state_rx, 
+                                         orders_compleated_rx, 
+                                         new_orders_from_elevator_rx, 
+                                         elevator_assigned_orders_tx, 
+                                         orders_confirmed_tx).await.unwrap();
+            loop {
+                decision.step().await;
+                std::thread::sleep(UPDATE_INTERVAL);
+            }
+        });
+    });
 
 
-
-    let hra_output_str; // Declare it outside to ensure visibility
-
-    if hra_output.status.success() {
-        // Fetch and deserialize output
-        hra_output_str = String::from_utf8(hra_output.stdout).expect("Invalid UTF-8 hra_output");
-        let hra_output = serde_json::from_str::<HashMap<String, Vec<Vec<bool>>>>(&hra_output_str)
-            .expect("Failed to deserialize hra_output");
-    } else {
-        hra_output_str = "Error: Execution failed".to_string();
-    }
-    
-    println!("Response from executable: {}", hra_output_str);
-        */
     Ok(()) 
 }
