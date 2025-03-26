@@ -5,11 +5,11 @@ use std::collections::{VecDeque, HashMap};
 use std::str;
 use std::hash::{Hash, Hasher};
 use local_ip_iddress::local_ip;
-use crate::modules::decision;
+use crate::modules::common;
 
 //====GenerateIDs====//
 
-pub fn get_ip() -> Option<string> {
+fn get_ip() -> Option<string> {
     local_ip().ok().map(|ip| ip.to_string());
 }
 
