@@ -1,14 +1,16 @@
-mod decision;
-mod elevator;
+mod modules{
+    pub mod decision;
+    pub mod elevator;
+}
 
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::io::Write;
 use serde::{Deserialize, Serialize};
 
-use decision::ElevatorState;
-use decision::Behaviour;
-use decision::Directions;
+use modules::decision::ElevatorState;
+use modules::decision::Behaviour;
+use modules::decision::Directions;
 //use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::runtime::Runtime;
@@ -17,7 +19,7 @@ use tokio::runtime::Runtime;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::time::{sleep, Duration};
-use elevator::ElevatorController;
+use modules::elevator::ElevatorController;
 
 
 const NUM_OF_FLOORS:u8 = 4;

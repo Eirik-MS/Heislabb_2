@@ -261,4 +261,3 @@ impl decision {
 
         //uses functions above to coordinate the process     
     }
-}
