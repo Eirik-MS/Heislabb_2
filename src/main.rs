@@ -4,7 +4,6 @@ use std::process::{Command, Stdio};
 use std::io::Write;
 use serde::{Deserialize, Serialize};
 
-use decision::ElevatorSystem;
 use decision::ElevatorState;
 use decision::Behaviour;
 use decision::Directions;
@@ -13,19 +12,15 @@ use std::thread;
 use tokio::runtime::Runtime;
 // use elevator::ElevatorController;
 // use network_rust::udpnet;
-use std::io::{self, Write};
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::time::{sleep, Duration};
 use elevator::ElevatorController;
 
-use modules::common;
 
 const NUM_OF_FLOORS:u8 = 4;
 const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 
-fn main() -> std::io::Result<()> {
-    println!("starting main");
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -74,7 +69,7 @@ async fn main() -> std::io::Result<()> {
         states,
     };
 
-    Ok(elevator_handle.await?)
+    Ok(elevator_handle.await?);
     // Serialize JSON
     let input_json = serde_json::to_string_pretty(&system).expect("Failed to serialize");
     let hra_output = Command::new("./src/modules/decision/hall_request_assigner")
@@ -99,4 +94,4 @@ async fn main() -> std::io::Result<()> {
     println!("Response from executable: {}", hra_output_str);
         
     Ok(()) 
-}}
+}
