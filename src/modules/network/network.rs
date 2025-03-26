@@ -1,12 +1,13 @@
 
 use crate::modules::common::*;
-use std::net::{UdpSocket, IpAddr, Ipv4Addr};
+use std::net::{UdpSocket, IpAddr, Ipv4Addr,SocketAddrV4};
 use serde::{Serialize, Deserialize};
 use serde_json;
 use std::collections::{VecDeque, HashMap};
 use std::str;
 use std::hash::{Hash, Hasher};
 use local_ip_address::local_ip;
+use md5;
 
 //====GenerateIDs====//
 
@@ -14,7 +15,7 @@ fn get_ip() -> Option<String> {
     local_ip().ok().map(|ip| ip.to_string())
 }
 
-pub fn generateIDs() -> Option<string>{
+pub fn generateIDs() -> Option<String>{
     let ip = get_ip().expect("Failed to get local IP");
     let id = md5::compute(ip);
     Some(format!{"{:x}", id})
