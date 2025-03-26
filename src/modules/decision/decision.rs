@@ -137,9 +137,9 @@ impl Decision {
                         if let Some(orders) = broadcast_message.orders.get_mut(&self.local_id) { //iterate my orders
                             for order in orders.iter_mut() {
                                 if order.floor == completed_floor { // everything for this floor
-                                    if order.status == OrderStatus::confirmed { //change status if confirmed to finished
+                                    if order.status == OrderStatus::Confirmed { //change status if confirmed to finished
 
-                                        order.status = OrderStatus::completed;
+                                        order.status = OrderStatus::Completed;
                                         order.barrier.clear(); //clear barrier just in case
                                         order.barrier.insert(self.local_id.clone());
                                     }
