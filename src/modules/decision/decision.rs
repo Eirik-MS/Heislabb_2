@@ -6,6 +6,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::time::{ Instant};
 use std::process::{Command, Stdio};
 use tokio::time::{sleep, Duration};
@@ -42,7 +43,7 @@ pub struct Order {
     pub call: u8, // 0 - up, 1 - down, 2 - cab
     pub floor: u8, //1,2,3,4
     pub status: OrderStatus,
-    pub aq_ids: Vec<String>, //barrier for requested->confirmed & confirmed->norder
+    pub barrier: HashSet<String>, //barrier for requested->confirmed & confirmed->norder
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
@@ -100,7 +101,7 @@ impl decision {
     ) -> Self {
         decision {
             local_id,
-            local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::default())),
+            local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::default())), //TODO: when empty?
             dead_elev: std::collections::HashMap::new(), //std::collections::HashMap<String, bool>,
 
             // network_elev_info_tx,
@@ -113,6 +114,11 @@ impl decision {
         }
     }
 
+
+    // BARRIER NOTE: for barrier to be approved we need to check
+    // which elevators are alive (local field: dead_elev) and then if all
+    // ALIVE elevators have attached ID in order's barrier, then we move
+    // however, we still jump to confirmed without barrier (kinda obvious)
     pub async fn step(& self) { 
 
         //------------------------------------------------------------------
@@ -126,7 +132,36 @@ impl decision {
             new_order = new_order_rx_guard.recv() => {
                 match new_order {
                     Some(order) => {
-                        //do smthing with order
+                        let mut broadcast_message = self.local_broadcastmessage.write().await;
+                        // check if order already exists
+                        let order_exists = match order.call {
+                            0 | 1 => { //HALL order
+                                broadcast_message.orders.iter_mut().any(|(elevator_id, orders)| {
+                                    orders.iter().any(|existing_order| { //unqieu order per floor button pressed up/down
+                                        existing_order.floor == order.floor && 
+                                        existing_order.call == order.call
+                                    })
+                                })
+                            }
+                            2 => {
+                                broadcast_message.orders.get_mut(&self.local_id).map_or(false, |orders| {
+                                    orders.iter().any(|existing_order| 
+                                        existing_order.floor == order.floor && 
+                                        existing_order.call == order.call
+                                    )
+                                }) 
+                            }
+                            _ => false,
+                        };
+    
+                        if !order_exists { //order was not found, add it
+                            let orders = broadcast_message.orders.entry(self.local_id.clone()).or_insert(vec![]);
+            
+                            let mut new_order = order.clone();
+                            new_order.barrier.insert(self.local_id.clone());
+                            
+                            orders.push(new_order);
+                        }
                     }
                     None => {
                         println!("new_order_rx channel closed.");
