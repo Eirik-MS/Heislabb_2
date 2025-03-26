@@ -1,15 +1,18 @@
 
+mod modules;
+
+use modules::common::*;
+use modules::elevator::*;
+use modules::decision::*;
+use modules::network::*;
+
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
 
-use decision::ElevatorState;
-use decision::Behaviour;
-use decision::Directions;
-use tokio::sync::mpsc;
-use tokio::time::Duration;
-use elevator::ElevatorController;
 
+use tokio::sync::mpsc;
+use tokio::time::{sleep, Duration};
 
 const NUM_OF_FLOORS:u8 = 4;
 const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
@@ -38,7 +41,7 @@ async fn main() -> std::io::Result<()> {
             }
         });
     });
-
+    /*
 
     // Construct test JSON data
     let mut states = HashMap::new();
@@ -62,7 +65,7 @@ async fn main() -> std::io::Result<()> {
         },
     );
 
-    /*
+    
     let system = ElevatorSystem {
         hallRequests: vec![
             vec![false, false],
@@ -75,7 +78,7 @@ async fn main() -> std::io::Result<()> {
 
     Ok(elevator_handle.await?);
     // Serialize JSON
-    let input_json = serde_json::to_string_pretty(&system).expect("Failed to serialize");
+    //let input_json = serde_json::to_string_pretty(&system).expect("Failed to serialize");
     let hra_output = Command::new("./src/modules/decision/hall_request_assigner")
     .arg("--input")
     .arg(&input_json)

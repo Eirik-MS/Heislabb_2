@@ -1,4 +1,31 @@
+use serde::{Serialize, Deserialize};
 
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
+pub struct ElevatorState {
+    pub current_floor: u8,
+    pub prev_floor: u8,
+    pub current_direction: u8,
+    pub prev_direction: u8,
+    pub emergency_stop: bool,
+    pub door_open: bool, //
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
+pub struct Order {
+    pub call: u8, // 0 - up, 1 - down, 2 - cab
+    pub floor: u8, //1,2,3,4
+    pub status: OrderStatus,
+    pub aq_ids: Vec<String>, //barrier for requested->confirmed & confirmed->norder
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum OrderStatus { 
+    Noorder, //false
+    Requested, //false
+    Confirmed, //true
+    Completed //false
+}
 
 // struct ElevatorState {
 //     current_floor: u8,
@@ -8,8 +35,7 @@
 //     emergency_stop: bool,
 //     door_state: u8,
 // }
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)] 
 pub struct BroadcastMessage {
     pub version: u64, //like order ID but for the whole broadcast message
     pub hallRequests: std::collections::HashMap<String, Vec<HallOrder>>, //elevID, hallOrders
@@ -20,17 +46,6 @@ pub struct BroadcastMessage {
 pub struct ElevatorSystem { //very local, basically only for order assigner executable
     pub hallRequests: Vec<Vec<bool>>, //ex.: [[false, false], [true, false], [false, false], [false, true]] ALL HALL REQUESTS MAPPED FROM GLOBAL QUEUE
     pub states: std::collections::HashMap<String, ElevatorState>, //all elev states
-}
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
-pub struct ElevatorState { //if I receive smthing different should map it to this for executable
-    pub behaviour: Behaviour,  // < "idle" | "moving" | "doorOpen" >
-    pub floor: u8,         // NonNegativeInteger
-    pub direction: Directions, //  < "up" | "down" | "stop" >
-    pub cabRequests: Vec<bool>, // [false,false,false,false] LOCAL
-    #[serde(skip)]
-    pub last_seen: Option<Instant>, //for the timeout, more than 5 secs?
-    #[serde(skip)]
-    pub dead: bool, 
 }
 
 // #[derive(Serialize, Deserialize, Debug, PartialEq, Clone,)] // everything just in case idk
@@ -91,14 +106,13 @@ pub enum Behaviour {
 //     //TODO: cab and hall orders sent to elevator
 // }
 
-
+//
 // //====MessageEnums====//
 // #[derive(Serialize, Deserialize, Debug)]
 // enum Message{
 //     elevatorOrder {id: u32, floor: u32, direction: String, internal: bool},
 //     elevatorState {id: u32, currentFloor: u32, movingDirection: String}
 // }
-
 // enum ReceivedData {
 //     Order {id: u32, floor: u32, direction: String, internal: bool},
 //     State {id: u32, currentFloor: u32, movingDirection: String}

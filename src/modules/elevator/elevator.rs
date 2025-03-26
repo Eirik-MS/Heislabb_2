@@ -11,26 +11,7 @@ use crossbeam_channel as cbc;
 use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
 
-
-
-#[derive(Clone)] 
-pub struct ElevatorState {
-    current_floor: u8,
-    prev_floor: u8,
-    current_direction: u8,
-    prev_direction: u8,
-    emergency_stop: bool,
-    door_open: bool, //
-}
-
-#[derive(Clone)] // Add Clone trait
-pub struct Order {
-    pub id: u32,
-    //UP = 0, DOWN = 1, CAB = 2
-    pub call: u8, 
-
-    pub floor: u8,
-}
+use crate::modules::common::*;
 
 pub struct ElevatorController {
 
@@ -154,9 +135,10 @@ impl ElevatorController {
                 println!("{:#?}", call_button);
                 
                 let order = Order {
-                    id: 0, 
                     call: call_button.call,
                     floor: call_button.floor,
+                    status: OrderStatus::requested,
+                    aq_ids: Vec::<String>::new(),
                 }; 
 
                 let _ = self.new_orders_from_elevator_tx.send(order).await;
