@@ -1,6 +1,5 @@
-#workspace = { members = ["src/modules/Network_nod", "src/modules/elevator"] }
 [package]
-name = "ex2"
+name = "Heislabb_2"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,8 +9,9 @@ edition = "2021"
 network-rust = { git = "https://github.com/TTK4145/network-rust", tag = "v0.3.0" }
 driver-rust = { git = "https://github.com/TTK4145/driver-rust", tag = "v0.1.0" }
 
-elevator = {path = "./src/modules/elevator"}
-Network_nod = { path = "./src/modules/Network_nod" }
-
 crossbeam-channel = "0.5"
 tokio = { version = "1", features = ["full"] }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+local-ip-address = "0.3"
+md5 = "0.7"
