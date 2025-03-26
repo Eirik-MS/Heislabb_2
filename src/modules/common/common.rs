@@ -1,6 +1,27 @@
 use serde::{Serialize, Deserialize};
 
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
+pub struct ElevatorState {
+    pub current_floor: u8,
+    pub prev_floor: u8,
+    pub current_direction: u8,
+    pub prev_direction: u8,
+    pub emergency_stop: bool,
+    pub door_open: bool, //
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
+pub struct Order {
+    pub id: u32,
+    //UP = 0, DOWN = 1, CAB = 2
+    pub call: u8, 
+
+    pub floor: u8,
+}
+
+
+
 // struct ElevatorState {
 //     current_floor: u8,
 //     prev_floor: u8,
@@ -20,17 +41,6 @@ pub struct BroadcastMessage {
 pub struct ElevatorSystem { //very local, basically only for order assigner executable
     pub hallRequests: Vec<Vec<bool>>, //ex.: [[false, false], [true, false], [false, false], [false, true]] ALL HALL REQUESTS MAPPED FROM GLOBAL QUEUE
     pub states: std::collections::HashMap<String, ElevatorState>, //all elev states
-}
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
-pub struct ElevatorState { //if I receive smthing different should map it to this for executable
-    pub behaviour: Behaviour,  // < "idle" | "moving" | "doorOpen" >
-    pub floor: u8,         // NonNegativeInteger
-    pub direction: Directions, //  < "up" | "down" | "stop" >
-    pub cabRequests: Vec<bool>, // [false,false,false,false] LOCAL
-    #[serde(skip)]
-    pub last_seen: Option<Instant>, //for the timeout, more than 5 secs?
-    #[serde(skip)]
-    pub dead: bool, 
 }
 
 // #[derive(Serialize, Deserialize, Debug, PartialEq, Clone,)] // everything just in case idk
