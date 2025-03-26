@@ -57,7 +57,7 @@ impl Decision {
     ) -> Self {
         Decision {
             local_id,
-            local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::default())), //TODO: when empty?
+            local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::new(0))), //TODO: when empty?
             dead_elev: std::collections::HashMap::new(), //std::collections::HashMap<String, bool>,
 
             network_elev_info_tx: Mutex::new(network_elev_info_tx),
@@ -84,8 +84,11 @@ impl Decision {
         let mut order_completed_rx_guard = self.order_completed_rx.lock().await;
         let mut new_elev_state_rx_guard = self.new_elev_state_rx.lock().await;
 
-        tokio::select! {
+        let mut network_elev_info_rx_guard = self.network_elev_info_rx.lock().await;
+        let mut network_alivedead_rx_guard = self.network_alivedead_rx.lock().await;
 
+        tokio::select! {
+            //---------ELEVATOR COMMUNICATION--------------------//
             new_order = new_order_rx_guard.recv() => {
                 match new_order {
                     Some(order) => {
@@ -167,13 +170,61 @@ impl Decision {
                         println!("new_elev_state_rx channel closed.");
                     }
                 }
-            }
+            },
+
+            //---------NETWORK COMMUNICATION--------------------//
+            recvd_broadcast_message = network_elev_info_rx_guard.recv() => {
+                match recvd_broadcast_message {
+                    Some(recvd) => {
+                    }
+                    None => {
+                        println!("network_elev_info_rx channel closed.");
+                    }
+                }
+            },
+
+            recvd_deadalive = network_alivedead_rx_guard.recv() => {
+                match recvd_deadalive {
+                    Some(deadalive) => {
+                    }
+                    None => {
+                        println!("network_alivedead_rx channel closed.");
+                    }
+                }
+            },
 
         }
 
-        //TODO: check that we can move from requested to confirmed, if yes change status call hall assigner, clean barrier (CAN THIS BE AN ISSUE?)
+        //check that we can move from requested to confirmed, if yes change status, call hall assigner, clean barrier (CAN THIS BE AN ISSUE?)
+        let alive_elevators: HashSet<String> = self
+            .dead_elev
+            .iter()
+            .filter(|(_, &is_dead)| !is_dead) // keep alive ones
+            .map(|(id, _)| id.clone())
+            .collect();
 
-        //TODO: check if we can move from finished to NoOrder, clean barrier
+        let mut broadcast_msg = self.local_broadcastmessage.write().await;
+
+        for (_elev_id, orders) in &mut broadcast_msg.orders {
+            for order in orders.iter_mut() {
+                if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
+                    order.status = OrderStatus::Confirmed;
+                    order.barrier.clear();
+                }
+            }
+        }
+        self.hall_order_assigner();
+
+        //check if we can move from finished to NoOrder, clean barrier
+        for (_elev_id, orders) in &mut broadcast_msg.orders {
+            for order in orders.iter_mut() {
+                if order.status == OrderStatus::Completed && alive_elevators.is_subset(&order.barrier) {
+                    order.status = OrderStatus::Noorder;
+                    order.barrier.clear();
+                }
+            }
+        }
+
     }
 
     pub async fn hall_order_assigner(& self) { //check if mut is needed here
