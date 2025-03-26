@@ -32,8 +32,9 @@ pub struct Decision {
     local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, // everything locally sent as heartbeat
     dead_elev: std::collections::HashMap<String, bool>,
     //NETWORK CBC
-    // network_elev_info_tx: cbc::Sender<BroadcastMessage>, 
-    // network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
+    network_elev_info_tx: Mutex<mpsc::Sender<BroadcastMessage>>, 
+    network_elev_info_rx: Mutex<mpsc::Receiver<BroadcastMessage>>,
+    network_alivedead_rx: Mutex<mpsc::Receiver<AliveDeadInfo>>,
     //OTEHRS/UNSURE
     new_elev_state_rx: Mutex<mpsc::Receiver<ElevatorState>>, //state to modify
     order_completed_rx: Mutex<mpsc::Receiver<u8>>, //elevator floor
@@ -45,8 +46,9 @@ impl Decision {
     pub fn new(
         local_id: String,
 
-        // network_elev_info_tx: cbc::Sender<BroadcastMessage>,
-        // network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
+        network_elev_info_tx: Sender<BroadcastMessage>,
+        network_elev_info_rx: Receiver<BroadcastMessage>,
+        network_alivedead_rx: Receiver<AliveDeadInfo>,
 
         new_elev_state_rx: Receiver<ElevatorState>,
         order_completed_rx: Receiver<u8>,
@@ -58,8 +60,9 @@ impl Decision {
             local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::default())), //TODO: when empty?
             dead_elev: std::collections::HashMap::new(), //std::collections::HashMap<String, bool>,
 
-            // network_elev_info_tx,
-            // network_elev_info_rx,
+            network_elev_info_tx: Mutex::new(network_elev_info_tx),
+            network_elev_info_rx: Mutex::new(network_elev_info_rx),
+            network_alivedead_rx: Mutex::new(network_alivedead_rx),
 
             new_elev_state_rx: Mutex::new(new_elev_state_rx),
             order_completed_rx: Mutex::new(order_completed_rx),
@@ -97,7 +100,7 @@ impl Decision {
                                     })
                                 })
                             }
-                            2 => {
+                            2 => { //CAB
                                 broadcast_message.orders.get_mut(&self.local_id).map_or(false, |orders| {
                                     orders.iter().any(|existing_order| 
                                         existing_order.floor == order.floor && 
@@ -116,6 +119,8 @@ impl Decision {
                             
                             orders.push(new_order);
                         }
+
+                        self.hall_order_assigner(); //POSSIBLY DELETE: new order always comes as requested (FALSE), so no new order, might not need this here.
                     }
                     None => {
                         println!("new_order_rx channel closed.");
@@ -127,6 +132,22 @@ impl Decision {
                 match order_completed {
                     Some(completed_floor) => {
 
+                        let mut broadcast_message = self.local_broadcastmessage.write().await;
+
+                        if let Some(orders) = broadcast_message.orders.get_mut(&self.local_id) { //iterate my orders
+                            for order in orders.iter_mut() {
+                                if order.floor == completed_floor { // everything for this floor
+                                    if order.status == OrderStatus::confirmed { //change status if confirmed to finished
+
+                                        order.status = OrderStatus::completed;
+                                        order.barrier.clear(); //clear barrier just in case
+                                        order.barrier.insert(self.local_id.clone());
+                                    }
+                                }
+                            }
+                        }
+
+                        self.hall_order_assigner(); //reassign since some of the are now false
                     }
                     None => {
                         println!("order_completed_rx channel closed.");
@@ -138,7 +159,9 @@ impl Decision {
             new_elev_state = new_elev_state_rx_guard.recv() => {
                 match new_elev_state {
                     Some(new_state) => {
-
+                        let mut broadcast_message = self.local_broadcastmessage.write().await;
+                        broadcast_message.states.insert(self.local_id.clone(), new_state);
+                        println!("Updated broadcast message: {:?}", *broadcast_message);
                     }
                     None => {
                         println!("new_elev_state_rx channel closed.");
@@ -147,6 +170,10 @@ impl Decision {
             }
 
         }
+
+        //TODO: check that we can move from requested to confirmed, if yes change status call hall assigner, clean barrier (CAN THIS BE AN ISSUE?)
+
+        //TODO: check if we can move from finished to NoOrder, clean barrier
     }
 
     pub async fn hall_order_assigner(& self) { //check if mut is needed here
