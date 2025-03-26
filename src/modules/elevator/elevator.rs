@@ -177,6 +177,11 @@ impl ElevatorController {
                         self.elevator.motor_direction(e::DIRN_STOP);
                     }
                 }
+
+                if self.queue.read().await.len() == 0 {
+                    state.current_direction = e::DIRN_STOP;
+                    self.elevator.motor_direction(e::DIRN_STOP);
+                }
             },
             recv(self.stop_btn_rx) -> a => {
                 let stop = a.unwrap();

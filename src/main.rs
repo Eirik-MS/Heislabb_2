@@ -23,8 +23,9 @@ const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     // Get the local IP address
-    let elevator_id: String = local_ip().expect("Failed to get local IP address").to_string();
-    println!("Elevator ID: {}", elevator_id);
+    //let elevator_id: String = local_ip().expect("Failed to get local IP address").to_string();
+    //println!("Elevator ID: {}", elevator_id);
+    let elevator_id: String = "elevator1".to_string();
 
     // Setup channels, etc.
     let (new_orders_from_elevator_tx, new_orders_from_elevator_rx) = mpsc::channel(2);

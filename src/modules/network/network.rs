@@ -21,7 +21,6 @@ pub fn generateIDs() -> Option<String>{
 }
 
 //====ClientEnd====//
-
 pub fn UDPBroadcast(message: &BroadcastMessage){
     let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to find socket");
 
