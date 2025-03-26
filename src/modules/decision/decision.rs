@@ -10,6 +10,7 @@ use std::time::{ Instant};
 use std::process::{Command, Stdio};
 use tokio::time::{sleep, Duration};
 use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::sync::mpsc::{Sender,Receiver};
 use driver_rust::elevio::elev as e;
 const MAX_FLOORS: usize = 4; //IMPORT FROM MAIN
 // All peers supposed to have:
@@ -76,101 +77,88 @@ pub struct decision {
     local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, // everything locally sent as heartbeat
     dead_elev: std::collections::HashMap<String, bool>,
     //NETWORK CBC
-    network_elev_info_tx: cbc::Sender<BroadcastMessage>, 
-    network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
+    // network_elev_info_tx: cbc::Sender<BroadcastMessage>, 
+    // network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
     //OTEHRS/UNSURE
-    new_elev_state_rx: cbc::Receiver<ElevatorState>, //state to modify
-    order_completed_rx: cbc::Receiver<u8>, //elevator floor
-    new_order_rx: cbc::Receiver<Order>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
-    elev_orders_tx: cbc::Sender<std::collections::HashMap<String, Order>>,
+    new_elev_state_rx: Mutex<mpsc::Receiver<ElevatorState>>, //state to modify
+    order_completed_rx: Mutex<mpsc::Receiver<u8>>, //elevator floor
+    new_order_rx: Mutex<mpsc::Receiver<Order>>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
+    elevator_assigned_orders_tx: mpsc::Sender<Order>, //one order only actually, s is typo
 }
 
 impl decision {
     pub fn new(
         local_id: String,
 
-        network_elev_info_tx: cbc::Sender<BroadcastMessage>,
-        network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
+        // network_elev_info_tx: cbc::Sender<BroadcastMessage>,
+        // network_elev_info_rx: cbc::Receiver<BroadcastMessage>,
 
-        new_elev_state_rx: cbc::Receiver<ElevatorState>,
-   //     new_elev_state_tx: cbc::Receiver<ElevatorState>,
-        order_completed_rx: cbc::Receiver<u8>,
-        new_order_rx: cbc::Receiver<Order>,
-        elev_orders_tx: cbc::Sender<std::collections::HashMap<String, Order>>,
+        new_elev_state_rx: Receiver<ElevatorState>,
+        order_completed_rx: Receiver<u8>,
+        new_order_rx: Receiver<Order>,
+        elevator_assigned_orders_tx: mpsc::Sender<Order>,
     ) -> Self {
         decision {
             local_id,
             local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::default())),
             dead_elev: std::collections::HashMap::new(), //std::collections::HashMap<String, bool>,
 
-            network_elev_info_tx,
-            network_elev_info_rx,
+            // network_elev_info_tx,
+            // network_elev_info_rx,
 
-            new_elev_state_rx,
-            order_completed_rx,
-            new_order_rx,
-            elev_orders_tx,
+            new_elev_state_rx: Mutex::new(new_elev_state_rx),
+            order_completed_rx: Mutex::new(order_completed_rx),
+            new_order_rx: Mutex::new(new_order_rx),
+            elevator_assigned_orders_tx,
         }
     }
 
     pub async fn step(& self) { 
-        // cbc::select! {
 
-        //     recv(self.network_elev_info_rx) -> package => {
-        //         let received_BM = package.unwrap();
-        //         //update current broadcast message
-                
-        //         let mut broadcast = self.local_broadcastmessage.write().await;
-        //         if (received_BM.version > broadcast.version) {
-        //             broadcast.version = received_BM.version;
-        //             broadcast.hallRequests = received_BM.hallRequests;
-        //             broadcast.states = received_BM.states;
+        //------------------------------------------------------------------
+        // Lock first to ensure the guard lives long enough to be used
+        let mut new_order_rx_guard = self.new_order_rx.lock().await;
+        let mut order_completed_rx_guard = self.order_completed_rx.lock().await;
+        let mut new_elev_state_rx_guard = self.new_elev_state_rx.lock().await;
 
-        //             self.hall_order_assigner(); //reorder
-        //         }
-        //         else { /*REJECTING - older versions, do nothing*/}
-                
-        //     },
+        tokio::select! {
 
-        //     recv(self.new_elev_state_rx) -> package => {
-        //         let received_elev_state = package.unwrap();
+            new_order = new_order_rx_guard.recv() => {
+                match new_order {
+                    Some(order) => {
+                        //do smthing with order
+                    }
+                    None => {
+                        println!("new_order_rx channel closed.");
+                    }
+                }
+            },
 
-        //         let mut broadcast = self.local_broadcastmessage.write().await;
-        //         // modify the state of the current elevator and reassign orders:
+            order_completed = order_completed_rx_guard.recv() => {
+                match order_completed {
+                    Some(completed_floor) => {
 
-        //         self.hall_order_assigner();
+                    }
+                    None => {
+                        println!("order_completed_rx channel closed.");
+                    }
+                }
+            },
 
-        //     },
 
-        //     recv(self.new_order_rx) -> package => {},
+            new_elev_state = new_elev_state_rx_guard.recv() => {
+                match new_elev_state {
+                    Some(new_state) => {
 
-        //     recv(self.order_completed_rx) -> package => {},
+                    }
+                    None => {
+                        println!("new_elev_state_rx channel closed.");
+                    }
+                }
+            }
 
-        // }
+        }
     }
-
-    // pub fn elev_state_update(&mut self) { //FSM
-    //     //receives from the FSM updates state calls order assigner
-
-    // }
-
-    // pub fn new_order() { //FSM
-
-    //     //supposedly updates hallOrders in elevatorSystem struct
-    //     //updates cab orders in local_state of the elevator 
-    // }
-
-    // pub fn order_completed() { //FSM
-    //     //deals with completed orders
-    //     //supposedly removes them from the local cab orders
-    //     //but also from the global hall queue... how?
-    // }
-
-    // pub fn handle_timeout() { //based on NETWORK
-    //     //needs to handle lost elevators
-    //     //additionally new elevators
-    //     //upduate the broadcast message and call hall assigner to fix stuff
-    // }
 
     pub async fn hall_order_assigner(& self) { //check if mut is needed here
         //1. map broadcast Message to Elevator system struct
@@ -261,6 +249,7 @@ impl decision {
                 println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
             }
 
+            // 3. update local broadcast message according to the return value of executable - hra_output
             for (new_elevator_id, orders) in hra_output.iter() {
                 for (floor_index, buttons) in orders.iter().enumerate() {
                     let floor = (floor_index + 1) as u8; 
@@ -297,8 +286,6 @@ impl decision {
                 }
             }
         }
-        // 3. update local broadcast message according to the return value of executable - hra_output
-
         
         for (elevator_id, orders) in new_orders {
             for order in orders {
@@ -306,6 +293,16 @@ impl decision {
             }
         }
 
-        //TODO: send order queue to FSM
+        //4. send order one by one to FSM
+        for (_elevator_id, orders) in &broadcast.orders {
+            for order in orders.iter() {
+                if order.status == OrderStatus::confirmed {
+                    if let Err(e) = self.elevator_assigned_orders_tx.send(order.clone()).await {
+                        eprintln!("Failed to send confirmed order: {}", e);
+                    }
+                }
+            }
+        }
+
     }
 }
