@@ -12,93 +12,61 @@ use serde::{Deserialize, Serialize};
 
 
 use tokio::sync::mpsc;
-use tokio::time::{sleep, Duration};
+use tokio::time::{interval, Duration};
 
 const NUM_OF_FLOORS:u8 = 4;
 const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 
-
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    
-    // Create channels for communication between the elevator controller and the decision thread
+    // Setup channels, etc.
     let (new_orders_from_elevator_tx, new_orders_from_elevator_rx) = mpsc::channel(2);
     let (elevator_assigned_orders_tx, elevator_assigned_orders_rx) = mpsc::channel(2);
-    let (orders_compleated_tx, orders_compleated_rx) = mpsc::channel(2);
+    let (orders_completed_tx, orders_completed_rx) = mpsc::channel(2);
     let (elevator_state_tx, elevator_state_rx) = mpsc::channel(2);
     let (orders_confirmed_tx, orders_confirmed_rx) = mpsc::channel(2);
 
+    // Spawn elevator task
+    let elevator_handle = tokio::spawn(async move {
+        let elev_ctrl: std::sync::Arc<ElevatorController> = ElevatorController::new(
+            NUM_OF_FLOORS,
+            new_orders_from_elevator_tx,
+            elevator_assigned_orders_rx,
+            orders_completed_tx,
+            elevator_state_tx,
+            orders_confirmed_rx,
+        ).await.expect("Failed to create ElevatorController");
 
-
-    // Spawn a separate thread to run the elevator logic
-    let elevator_handle = tokio::task::spawn_blocking(move || {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async move {
-            let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS, new_orders_from_elevator_tx, elevator_assigned_orders_rx, orders_compleated_tx, elevator_state_tx, orders_confirmed_rx).await.unwrap();
-            loop {
-                elev_ctrl.step().await;
-                std::thread::sleep(UPDATE_INTERVAL);
-            }
-        });
+        let mut interval = interval(UPDATE_INTERVAL);
+        loop {
+            interval.tick().await;
+            elev_ctrl.step().await;
+        }
     });
-    /*
 
-    // Construct test JSON data
-    let mut states = HashMap::new();
-    states.insert(
-        "one".to_string(),
-        ElevatorState {
-            behaviour: Behaviour::moving,
-            floor: 2,
-            direction: Directions::up,
-            cabRequests: vec![false, false, true, true],
-        },
-    );
+    // Spawn decision task
+    let decision_handle = tokio::spawn(async move {
+        let decision = Decision::new(
+            system_id,
+            elevator_state_rx,
+            orders_completed_rx,
+            new_orders_from_elevator_rx,
+            elevator_assigned_orders_tx,
+            orders_confirmed_tx,
+        ).await.expect("Failed to create Decision");
+        
+        let mut interval = interval(UPDATE_INTERVAL);
+        loop {
+            interval.tick().await;
+            decision.step().await;
+        }
+    });
 
-    states.insert(
-        "two".to_string(),
-        ElevatorState {
-            behaviour: Behaviour::idle,
-            floor: 0,
-            direction: Directions::stop,
-            cabRequests: vec![false, false, false, false],
-        },
-    );
-
+    // Optionally await both handles or run other tasks
+    // For example, you can await one of them or use join! macro if they need to run concurrently.
+    // Here we simply await the elevator_handle for demonstration.
+    elevator_handle.await?;
+    decision_handle.await?;
     
-    let system = ElevatorSystem {
-        hallRequests: vec![
-            vec![false, false],
-            vec![true, false],
-            vec![false, false],
-            vec![false, true],
-        ],
-        states,
-    };
-
-    Ok(elevator_handle.await?);
-    // Serialize JSON
-    //let input_json = serde_json::to_string_pretty(&system).expect("Failed to serialize");
-    let hra_output = Command::new("./src/modules/decision/hall_request_assigner")
-    .arg("--input")
-    .arg(&input_json)
-    .output()
-    .expect("Failed to execute hall_request_assigner");
-
-
-
-    let hra_output_str; // Declare it outside to ensure visibility
-
-    if hra_output.status.success() {
-        // Fetch and deserialize output
-        hra_output_str = String::from_utf8(hra_output.stdout).expect("Invalid UTF-8 hra_output");
-        let hra_output = serde_json::from_str::<HashMap<String, Vec<Vec<bool>>>>(&hra_output_str)
-            .expect("Failed to deserialize hra_output");
-    } else {
-        hra_output_str = "Error: Execution failed".to_string();
-    }
-    
-    println!("Response from executable: {}", hra_output_str);
-        */
-    Ok(()) 
+    Ok(())
 }

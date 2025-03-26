@@ -1,7 +1,4 @@
-//When I wrote this code only God and I new what was going on, now only God knows
-use std::thread::*;
 use std::sync::Arc;
-
 use tokio::sync::mpsc::{Sender,Receiver};
 use tokio::time::{sleep, Duration};
 use tokio::sync::{Mutex, RwLock, mpsc};
@@ -52,7 +49,7 @@ impl ElevatorController {
                      elevator_assigned_orders_rx: Receiver<Order>,
                      orders_completed_tx: Sender<u8>,
                      elevator_state_tx: Sender<ElevatorState>,
-                     orders_recived_compleated_rx: Receiver<Order>) -> std::io::Result<Arc<Self>>{
+                     orders_recived_completed_rx: Receiver<Order>) -> std::io::Result<Arc<Self>>{
         //Create the channels not passed in by main:                
         let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
         let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
@@ -61,7 +58,7 @@ impl ElevatorController {
         let (door_closing_tx, door_closing_rx) = mpsc::channel(2);
 
         let controller = Arc::new(Self {
-            elevator: e::Elevator::init("localhost:15657", elev_num_floors)?,
+            elevator: try_init_elevator(elev_num_floors).await, 
             state: Arc::new(RwLock::new(ElevatorState {
                 current_floor: u8::MAX,
                 prev_floor: u8::MAX,
@@ -320,3 +317,18 @@ impl ElevatorController {
     }
 }
 
+async fn try_init_elevator(elev_num_floors: u8) -> e::Elevator {
+    let addr = "localhost:15657";
+    loop {
+        match e::Elevator::init(addr, elev_num_floors) {
+            Ok(elevator) => {
+                println!("Connected to elevator server at {}", addr);
+                break elevator;
+            }
+            Err(e) => {
+                println!("Server is not running: {}. Retrying in 3 seconds...", e);
+                sleep(Duration::from_secs(3)).await;
+            }
+        }
+    }
+}
