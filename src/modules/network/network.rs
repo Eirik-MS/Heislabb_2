@@ -8,7 +8,7 @@ use std::str;
 use std::hash::{Hash, Hasher};
 use local_ip_address::local_ip;
 use std::sync::{Arc, Mutex};
-use std::time{Instant, Duration};
+use std::time::{Instant, Duration};
 use crossbeam_channel as cbc;
 use md5;
 

@@ -33,21 +33,16 @@ async fn main() -> std::io::Result<()> {
     let (orders_confirmed_tx, orders_confirmed_rx) = mpsc::channel(2);
 
     // Spawn elevator task
-    let elevator_handle = tokio::spawn(async move {
-        let elev_ctrl: std::sync::Arc<ElevatorController> = ElevatorController::new(
-            NUM_OF_FLOORS,
-            new_orders_from_elevator_tx,
-            elevator_assigned_orders_rx,
-            orders_completed_tx,
-            elevator_state_tx,
-            orders_confirmed_rx,
-        ).await.expect("Failed to create ElevatorController");
-
-        let mut interval = interval(UPDATE_INTERVAL);
-        loop {
-            interval.tick().await;
-            elev_ctrl.step().await;
-        }
+    // Spawn a separate thread to run the elevator logic
+    let elevator_handle = tokio::task::spawn_blocking(move || {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async move {
+            let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS, new_orders_from_elevator_tx, elevator_assigned_orders_rx, orders_completed_tx, elevator_state_tx, orders_confirmed_rx).await.unwrap();
+            loop {
+                elev_ctrl.step().await;
+                std::thread::sleep(UPDATE_INTERVAL);
+            }
+        });
     });
 
     // Spawn decision task
