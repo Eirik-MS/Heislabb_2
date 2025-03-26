@@ -13,14 +13,19 @@ pub struct ElevatorState {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
 pub struct Order {
-    pub id: u32,
-    //UP = 0, DOWN = 1, CAB = 2
-    pub call: u8, 
-
-    pub floor: u8,
+    pub call: u8, // 0 - up, 1 - down, 2 - cab
+    pub floor: u8, //1,2,3,4
+    pub status: OrderStatus,
+    pub aq_ids: Vec<String>, //barrier for requested->confirmed & confirmed->norder
 }
 
-
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum OrderStatus { 
+    Noorder, //false
+    Requested, //false
+    Confirmed, //true
+    Completed //false
+}
 
 // struct ElevatorState {
 //     current_floor: u8,

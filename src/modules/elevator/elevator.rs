@@ -135,9 +135,10 @@ impl ElevatorController {
                 println!("{:#?}", call_button);
                 
                 let order = Order {
-                    id: 0, 
                     call: call_button.call,
                     floor: call_button.floor,
+                    status: OrderStatus::requested,
+                    aq_ids: Vec::<String>::new(),
                 }; 
 
                 let _ = self.new_orders_from_elevator_tx.send(order).await;

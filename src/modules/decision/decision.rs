@@ -66,13 +66,7 @@ pub enum Behaviour {
     doorOpen
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum OrderStatus { 
-    noorder, //false
-    requested, //false
-    confirmed, //true
-    completed //false
-}
+
 
 
 pub struct decision {
