@@ -40,6 +40,7 @@ pub struct Decision {
     order_completed_rx: Mutex<mpsc::Receiver<u8>>, //elevator floor
     new_order_rx: Mutex<mpsc::Receiver<Order>>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
     elevator_assigned_orders_tx: mpsc::Sender<Order>, //one order only actually, s is typo
+    orders_recived_confirmed_tx: mpsc::Sender<Order>, //send to network
 }
 
 impl Decision {
@@ -54,6 +55,7 @@ impl Decision {
         order_completed_rx: Receiver<u8>,
         new_order_rx: Receiver<Order>,
         elevator_assigned_orders_tx: mpsc::Sender<Order>,
+        orders_recived_confirmed_tx: mpsc::Sender<Order>,
     ) -> Self {
         Decision {
             local_id,
@@ -68,6 +70,7 @@ impl Decision {
             order_completed_rx: Mutex::new(order_completed_rx),
             new_order_rx: Mutex::new(new_order_rx),
             elevator_assigned_orders_tx,
+            orders_recived_confirmed_tx: orders_recived_confirmed_tx,
         }
     }
 
@@ -247,11 +250,13 @@ impl Decision {
                         order.status = OrderStatus::Confirmed;
                         order.barrier.clear();
                         status_changed = true;
+                        self.orders_recived_confirmed_tx.send(order.clone()).await.unwrap();
                     }
                     if order.status == OrderStatus::Requested && order.call == 2 && order.barrier.is_empty() {
                         println!("CAB order without barrier, setting to confirmed.");
                         order.status = OrderStatus::Confirmed;
                         status_changed = true;
+                        self.orders_recived_confirmed_tx.send(order.clone()).await.unwrap();
                     }
                 }
             }

@@ -52,7 +52,7 @@ impl ElevatorController {
                      elevator_assigned_orders_rx: Receiver<Order>,
                      orders_completed_tx: Sender<u8>,
                      elevator_state_tx: Sender<ElevatorState>,
-                     orders_recived_completed_rx: Receiver<Order>) -> std::io::Result<Arc<Self>>{
+                     orders_recived_confirmed_rx: Receiver<Order>) -> std::io::Result<Arc<Self>>{
         //Create the channels not passed in by main:                
         let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
         let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
@@ -71,7 +71,7 @@ impl ElevatorController {
                 door_open: false,
                 obstruction: false,
             })),
-
+            
             queue: RwLock::new(Vec::<Order>::new()), 
             num_of_floors: elev_num_floors.clone(),
             poll_period: Duration::from_millis(25),
@@ -91,7 +91,7 @@ impl ElevatorController {
             door_closing_rx: Mutex::new(door_closing_rx),
             new_orders_from_elevator_tx: new_orders_from_elevator_tx,
             elevator_assigned_orders_rx: Mutex::new(elevator_assigned_orders_rx),
-            order_recived_and_confirmed_rx: Mutex::new(orders_recived_completed_rx),
+            order_recived_and_confirmed_rx: Mutex::new(orders_recived_confirmed_rx),
             orders_completed_tx: orders_completed_tx,
             elevator_state_tx: elevator_state_tx,
         });
@@ -355,7 +355,10 @@ impl ElevatorController {
         let mut queue = self.queue.write().await;
         let original_len = queue.len();
         self.orders_completed_tx.send(floor).await.unwrap();
-
+        //#TODO: Can be optimized by only turning off ligths in current direction
+        for i in 0..3 {
+            self.elevator.call_button_light(floor, i, false);
+        }
         
         queue.retain(|order| order.floor != floor);
         

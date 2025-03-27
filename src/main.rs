@@ -66,7 +66,7 @@ async fn main() -> std::io::Result<()> {
             orders_completed_rx,
             new_orders_from_elevator_rx,
             elevator_assigned_orders_tx,
-            //orders_confirmed_tx,
+            orders_confirmed_tx,
         );
         
         let mut interval = interval(UPDATE_INTERVAL);
