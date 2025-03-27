@@ -10,6 +10,7 @@ use tokio::sync::watch;
 use std::net::UdpSocket;
 
 use std::collections::HashMap;
+use std::os::unix::net::SocketAddr;
 use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
 use local_ip_address::local_ip;
@@ -86,13 +87,20 @@ async fn main() -> std::io::Result<()> {
 
     // Setup network
     //let udp_socket = setup_udp_socket().await.unwrap();
-    let udp_socket = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
-    let udp_socekt_clone = udp_socket.try_clone().expect("Failed to clone socket");
+    //let ipV4_addr = network::get_ip().expect("Failed to get local IP");
+    //let socket_addr = format!("{}:30000", ipV4_addr);
+    //let udp_socekt_reciver = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
+    //let udp_socket_sender = UdpSocket::bind(socket_addr).expect("Failed to bind socket");
+
+    let mut udp_socket_sender = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
+    udp_socket_sender.set_broadcast(true).expect("Failed to enable UDP broadcast");
+    let udp_socket_reciver  = udp_socket_sender.try_clone().expect("Failed to clone socket");
+
 
     // Spawn network tasks
     let network_reciver_handle = tokio::spawn(async move {
         network_reciver(
-            udp_socket,
+            udp_socket_reciver,
             network_to_decision_tx,
             network_alive_tx,
             Duration::from_secs(5),
@@ -101,7 +109,7 @@ async fn main() -> std::io::Result<()> {
 
     let network_sender_handle = tokio::spawn(async move {
         network_sender(
-            udp_socekt_clone,
+            udp_socket_sender,
             decision_to_network_rx,
         ).await;
     });

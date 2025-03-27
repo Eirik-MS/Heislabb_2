@@ -25,6 +25,7 @@ pub fn get_ip() -> Option<String> {
 pub fn generateIDs() -> Option<String>{
     // If no IP is found, this will panic with a message.
     let ip = get_ip().expect("Failed to get local IP");
+    println!("Local IP: {}", ip);
     let id = md5::compute(ip);
     Some(format!("{:x}", id))
 }
@@ -36,7 +37,8 @@ pub async fn network_sender(
     loop {
         match decision_to_network_rx.recv().await {
             Some(message) => {
-                socket.set_broadcast(true).expect("Failed to enable UDP broadcast");
+                //println!("Sending message");
+                //socket.set_broadcast(true).expect("Failed to enable UDP broadcast");
 
                 let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30000);
                 let serMessage = serde_json::to_string(&message).expect("Failed to serialize message");
@@ -55,7 +57,7 @@ pub async fn network_sender(
 //====ServerEnd====//
 pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
     //println!("Listening for UDP broadcast messages on port 30000");
-    let mut buffer = [0; 65507];
+    let mut buffer = [0; 1024];
 
     let(size, source) = socket.recv_from(&mut buffer).expect("Failed to receive data");
     
