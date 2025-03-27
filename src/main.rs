@@ -92,7 +92,7 @@ async fn main() -> std::io::Result<()> {
     //let udp_socekt_reciver = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
     //let udp_socket_sender = UdpSocket::bind(socket_addr).expect("Failed to bind socket");
 
-    let mut udp_socket_sender = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
+    let mut udp_socket_sender = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket");
     udp_socket_sender.set_broadcast(true).expect("Failed to enable UDP broadcast");
     let udp_socket_reciver  = udp_socket_sender.try_clone().expect("Failed to clone socket");
 
