@@ -57,8 +57,6 @@ impl BroadcastMessage {
     }
 }
 
-
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
 pub struct ElevatorSystem { //very local, basically only for order assigner executable
     pub hallRequests: Vec<Vec<bool>>, //ex.: [[false, false], [true, false], [false, false], [false, true]] ALL HALL REQUESTS MAPPED FROM GLOBAL QUEUE
