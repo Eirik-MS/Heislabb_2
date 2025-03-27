@@ -291,7 +291,7 @@ impl ElevatorController {
                 let state = self.state.read().await;
                 if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
                     //If door is not open
-                    println!("Queue not empty.");
+                    //println!("Queue not empty.");
                     if !state.door_open {
                         let order = self.queue.read().await[0].clone();
                          if order.floor == state.current_floor {

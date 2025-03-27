@@ -375,12 +375,12 @@ impl Decision {
         //1. map broadcast Message to Elevator system struct
         //take even dead elevators? and then reassign orders
         //status assigned stays but elevators take possibly diff orders
-        println!("Hall order assigner called.");
+        //println!("Hall order assigner called.");
         let mut broadcast = self.local_broadcastmessage.write().await;
         println!("Broadcast message: {:?}", *broadcast);
         let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
         let mut states = std::collections::HashMap::new();
-        println!("Temp created.");
+        //println!("Temp created.");
         //1.1 map hall orders
         for orders in broadcast.orders.values() {
             for order in orders {
@@ -397,9 +397,9 @@ impl Decision {
                 state dorropen
             else idle
         */
-        println!("Check other elevators");
+        //println!("Check other elevators");
         for (id, state) in &broadcast.states {
-            println!("Checking elevator: {}", id);
+            //println!("Checking elevator: {}", id);
             let dead_elevators = self.dead_elev.lock().await;  
             if let Some(true) = dead_elevators.get(id) {
                 println!("Elevator {} is dead, skipping.", id);
@@ -415,7 +415,7 @@ impl Decision {
                 })
             })
             .collect();
-            println!("Cab requests: {:?}", cab_requests);
+            //println!("Cab requests: {:?}", cab_requests);
         
             let behaviour = if state.door_open {
                 "doorOpen"
