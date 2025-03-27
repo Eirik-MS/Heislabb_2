@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::time::{ Instant};
 use std::process::{Command, Stdio};
 use tokio::time::{sleep, Duration};
-use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::sync::{watch, Mutex, RwLock, mpsc};
 use tokio::sync::mpsc::{Sender,Receiver};
 use driver_rust::elevio::elev as e;
 const MAX_FLOORS: usize = 4; //IMPORT FROM MAIN
@@ -36,7 +36,7 @@ pub struct Decision {
     network_elev_info_rx: Mutex<mpsc::Receiver<BroadcastMessage>>,
     network_alivedead_rx: Mutex<mpsc::Receiver<AliveDeadInfo>>,
     //OTEHRS/UNSURE
-    new_elev_state_rx: Mutex<mpsc::Receiver<ElevatorState>>, //state to modify
+    new_elev_state_rx: Mutex<watch::Receiver<ElevatorState>>, //state to modify
     order_completed_rx: Mutex<mpsc::Receiver<u8>>, //elevator floor
     new_order_rx: Mutex<mpsc::Receiver<Order>>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
     elevator_assigned_orders_tx: mpsc::Sender<Order>, //one order only actually, s is typo
@@ -51,7 +51,7 @@ impl Decision {
         network_elev_info_rx: Receiver<BroadcastMessage>,
         network_alivedead_rx: Receiver<AliveDeadInfo>,
 
-        new_elev_state_rx: Receiver<ElevatorState>,
+        new_elev_state_rx: watch::Receiver<ElevatorState>,
         order_completed_rx: Receiver<u8>,
         new_order_rx: Receiver<Order>,
         elevator_assigned_orders_tx: mpsc::Sender<Order>,
@@ -172,16 +172,18 @@ impl Decision {
             },
 
 
-            new_elev_state = new_elev_state_rx_guard.recv() => {
-                match new_elev_state {
-                    Some(new_state) => {
+            result = new_elev_state_rx_guard.changed() => {
+                match result {
+                    Ok(()) => {
+                        //println!("New state received.");
+                        let new_state = new_elev_state_rx_guard.borrow().clone();
                         let mut broadcast_message = self.local_broadcastmessage.write().await;
                         broadcast_message.states.insert(self.local_id.clone(), new_state);
-                        //println!("Updated broadcast message: {:?}", *broadcast_message);
                     }
-                    None => {
+                    Err(_) => {
                         println!("new_elev_state_rx channel closed.");
                     }
+                    
                 }
             },
 

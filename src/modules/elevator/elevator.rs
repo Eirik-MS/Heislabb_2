@@ -1,9 +1,8 @@
 use std::default;
 use std::sync::Arc;
 use std::thread::spawn;
-use tokio::sync::mpsc::{Sender,Receiver};
 use tokio::time::{sleep, Duration};
-use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use std::collections::HashSet;
 
 use crossbeam_channel as cbc;
@@ -36,11 +35,11 @@ pub struct ElevatorController {
     door_closing_rx: Mutex<mpsc::Receiver<bool>>,
     poll_period: std::time::Duration,
 
-    new_orders_from_elevator_tx: Sender<Order>,
+    new_orders_from_elevator_tx: mpsc::Sender<Order>,
     order_recived_and_confirmed_rx: Mutex<mpsc::Receiver<Order>>,
-    orders_completed_tx: Sender<u8>,
+    orders_completed_tx: mpsc::Sender<u8>,
     elevator_assigned_orders_rx: Mutex<mpsc::Receiver<Order>>,
-    elevator_state_tx: Sender<ElevatorState>,
+    elevator_state_tx: watch::Sender<ElevatorState>,
 }
 
 // Implementation the ElevatorController
@@ -48,11 +47,11 @@ pub struct ElevatorController {
 
 impl ElevatorController {
     pub async fn new(elev_num_floors: u8, 
-                     new_orders_from_elevator_tx: Sender<Order>, 
-                     elevator_assigned_orders_rx: Receiver<Order>,
-                     orders_completed_tx: Sender<u8>,
-                     elevator_state_tx: Sender<ElevatorState>,
-                     orders_recived_confirmed_rx: Receiver<Order>) -> std::io::Result<Arc<Self>>{
+                     new_orders_from_elevator_tx: mpsc::Sender<Order>, 
+                     elevator_assigned_orders_rx: mpsc::Receiver<Order>,
+                     orders_completed_tx: mpsc::Sender<u8>,
+                     elevator_state_tx: watch::Sender<ElevatorState>,
+                     orders_recived_confirmed_rx: mpsc::Receiver<Order>) -> std::io::Result<Arc<Self>>{
         //Create the channels not passed in by main:                
         let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
         let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
@@ -324,7 +323,7 @@ impl ElevatorController {
 
             //Send state data to other modules
             let elevator_state_clone = self.state.read().await.clone(); 
-            self.elevator_state_tx.send(elevator_state_clone).await.unwrap();
+            self.elevator_state_tx.send(elevator_state_clone).unwrap();
     }
 
     //Just use a timer and send a message over a mpsc channel

@@ -6,6 +6,7 @@ use modules::elevator::*;
 use modules::decision::*;
 use modules::network::*;
 use serde::de;
+use tokio::sync::watch;
 
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
@@ -26,12 +27,23 @@ async fn main() -> std::io::Result<()> {
     //let elevator_id: String = local_ip().expect("Failed to get local IP address").to_string();
     //println!("Elevator ID: {}", elevator_id);
     let elevator_id: String = "elevator1".to_string();
+    
+    // Create a dummy state to initialize the watch channel propperly
+    let dummystate = ElevatorState {
+        current_floor: u8::MAX,
+        prev_floor: u8::MAX,
+        current_direction: 0,
+        prev_direction: 0,
+        emergency_stop: false,
+        obstruction: false,
+        door_open: false,
+    };
 
     // Setup channels, etc.
     let (new_orders_from_elevator_tx, new_orders_from_elevator_rx) = mpsc::channel(100);
     let (elevator_assigned_orders_tx, elevator_assigned_orders_rx) = mpsc::channel(100);
     let (orders_completed_tx, orders_completed_rx) = mpsc::channel(100);
-    let (elevator_state_tx, elevator_state_rx) = mpsc::channel(100);
+    let (elevator_state_tx, elevator_state_rx) = watch::channel(dummystate);
     let (orders_confirmed_tx, orders_confirmed_rx) = mpsc::channel(100);
 
     // Setup network channels 
@@ -44,13 +56,9 @@ async fn main() -> std::io::Result<()> {
     let elevator_handle = tokio::task::spawn_blocking(move || {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async move {
-            let mut thread_counter = 0;
             let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS, new_orders_from_elevator_tx, elevator_assigned_orders_rx, orders_completed_tx, elevator_state_tx, orders_confirmed_rx).await.unwrap();
             loop {
-                //println!("Elevator thread counter: {}", thread_counter);
                 elev_ctrl.step().await;
-                std::thread::sleep(UPDATE_INTERVAL);
-                thread_counter += 1;
             }
         });
     });
