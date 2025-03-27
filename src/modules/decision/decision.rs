@@ -31,13 +31,13 @@ pub struct Decision {
     local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, // everything locally sent as heartbeat
     dead_elev: Arc<Mutex<std::collections::HashMap<String, bool>>>,
     //NETWORK CBC
-    network_elev_info_tx: Mutex<mpsc::Sender<BroadcastMessage>>, 
-    network_elev_info_rx: Mutex<mpsc::Receiver<BroadcastMessage>>,
-    network_alivedead_rx: Mutex<mpsc::Receiver<AliveDeadInfo>>,
+    network_elev_info_tx: mpsc::Sender<BroadcastMessage>, 
+    network_elev_info_rx: mpsc::Receiver<BroadcastMessage>,
+    network_alivedead_rx: mpsc::Receiver<AliveDeadInfo>,
     //OTEHRS/UNSURE
-    new_elev_state_rx: Mutex<watch::Receiver<ElevatorState>>, //state to modify
-    order_completed_rx: Mutex<mpsc::Receiver<u8>>, //elevator floor
-    new_order_rx: Mutex<mpsc::Receiver<Order>>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
+    new_elev_state_rx: watch::Receiver<ElevatorState>, //state to modify
+    order_completed_rx: mpsc::Receiver<u8>, //elevator floor
+    new_order_rx: mpsc::Receiver<Order>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
     elevator_assigned_orders_tx: mpsc::Sender<Order>, //one order only actually, s is typo
     orders_recived_confirmed_tx: mpsc::Sender<Order>, //send to network
 }
@@ -46,13 +46,13 @@ impl Decision {
     pub fn new(
         local_id: String,
 
-        network_elev_info_tx: Sender<BroadcastMessage>,
-        network_elev_info_rx: Receiver<BroadcastMessage>,
-        network_alivedead_rx: Receiver<AliveDeadInfo>,
+        network_elev_info_tx: mpsc::Sender<BroadcastMessage>,
+        network_elev_info_rx: mpsc::Receiver<BroadcastMessage>,
+        network_alivedead_rx: mpsc::Receiver<AliveDeadInfo>,
 
         new_elev_state_rx: watch::Receiver<ElevatorState>,
-        order_completed_rx: Receiver<u8>,
-        new_order_rx: Receiver<Order>,
+        order_completed_rx: mpsc::Receiver<u8>,
+        new_order_rx: mpsc::Receiver<Order>,
         elevator_assigned_orders_tx: mpsc::Sender<Order>,
         orders_recived_confirmed_tx: mpsc::Sender<Order>,
     ) -> Self {
@@ -61,15 +61,15 @@ impl Decision {
             local_broadcastmessage: Arc::new(RwLock::new(BroadcastMessage::new(0))), //TODO: when empty?
             dead_elev: Arc::new(Mutex::new(std::collections::HashMap::new())), // wrap in Mutex
 
-            network_elev_info_tx: Mutex::new(network_elev_info_tx),
+            network_elev_info_tx,
             network_elev_info_rx: Mutex::new(network_elev_info_rx),
             network_alivedead_rx: Mutex::new(network_alivedead_rx),
 
             new_elev_state_rx: Mutex::new(new_elev_state_rx),
-            order_completed_rx: Mutex::new(order_completed_rx),
-            new_order_rx: Mutex::new(new_order_rx),
+            order_completed_rx,
+            new_order_rx,
             elevator_assigned_orders_tx,
-            orders_recived_confirmed_tx: orders_recived_confirmed_tx,
+            orders_recived_confirmed_tx,
         }
     }
 
@@ -79,7 +79,7 @@ impl Decision {
     // ALIVE elevators have attached ID in order's barrier, then we move
     // however, we still jump to confirmed without barrier (kinda obvious)
     pub async fn step(& self) { 
-
+        println!("Entering decision step");
         //------------------------------------------------------------------
         // Lock first to ensure the guard lives long enough to be used
         let mut new_order_rx_guard = self.new_order_rx.lock().await;
@@ -365,10 +365,10 @@ impl Decision {
 
         //braodcasting message
         let local_msg = self.local_broadcastmessage.read().await.clone(); 
-        if let Err(e) = self.network_elev_info_tx.lock().await.send(local_msg).await {
+        if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
             eprintln!("Failed to send message: {:?}", e);
         }
-
+        println!("message sent from decisoin");
     }
 
     pub async fn hall_order_assigner(& self) { //check if mut is needed here
