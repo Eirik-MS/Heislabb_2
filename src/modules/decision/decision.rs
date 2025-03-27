@@ -32,7 +32,7 @@ pub struct Decision {
     dead_elev: Arc<Mutex<std::collections::HashMap<String, bool>>>,
     //NETWORK CBC
     network_elev_info_tx: Mutex<mpsc::Sender<BroadcastMessage>>, 
-    network_elev_info_rx: mpsc::Receiver<BroadcastMessage>,
+    network_elev_info_rx: Mutex<mpsc::Receiver<BroadcastMessage>>,
     network_alivedead_rx: Mutex<mpsc::Receiver<AliveDeadInfo>>,
     //OTEHRS/UNSURE
     new_elev_state_rx: Mutex<watch::Receiver<ElevatorState>>, //state to modify
@@ -62,7 +62,7 @@ impl Decision {
             dead_elev: Arc::new(Mutex::new(std::collections::HashMap::new())), // wrap in Mutex
 
             network_elev_info_tx: Mutex::new(network_elev_info_tx),
-            network_elev_info_rx,
+            network_elev_info_rx: Mutex::new(network_elev_info_rx),
             network_alivedead_rx: Mutex::new(network_alivedead_rx),
 
             new_elev_state_rx: Mutex::new(new_elev_state_rx),
@@ -86,7 +86,7 @@ impl Decision {
         let mut order_completed_rx_guard = self.order_completed_rx.lock().await;
         let mut new_elev_state_rx_guard = self.new_elev_state_rx.lock().await;
 
-     //   let mut network_elev_info_rx_guard = self.network_elev_info_rx.lock().await;
+        let mut network_elev_info_rx_guard = self.network_elev_info_rx.lock().await;
         let mut network_alivedead_rx_guard = self.network_alivedead_rx.lock().await;
 
         tokio::select! {
@@ -187,7 +187,7 @@ impl Decision {
             },
 
             //---------NETWORK COMMUNICATION--------------------//
-            recvd_broadcast_message = self.network_elev_info_rx.recv().await => {
+            recvd_broadcast_message = network_elev_info_rx_guard.recv() => {
                 match recvd_broadcast_message {
                     Some(recvd) => {
                         //1. handle elevatros states
