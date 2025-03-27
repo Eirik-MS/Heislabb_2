@@ -66,7 +66,7 @@ async fn main() -> std::io::Result<()> {
 
     // Spawn decision task
     let decision_handle = tokio::spawn(async move {
-        let decision = Decision::new(
+        let mut decision = Decision::new(
             elevator_id,
             decision_to_network_tx,
             network_to_decision_rx,
