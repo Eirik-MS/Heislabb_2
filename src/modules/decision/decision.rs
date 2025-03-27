@@ -21,7 +21,6 @@ const MAX_FLOORS: usize = 4; //IMPORT FROM MAIN
 // honestly the only reason we transfer cab orders globally is to use executable
 // otherwise they are managed locally since other elevators are not modifying or
 // taking over them, if elev dies, cab orders die too... 
-// TODO: maybe we need backup? maybe not
 
 
 
@@ -123,6 +122,7 @@ impl Decision {
                             orders.push(new_order);
                         }
 
+
                         self.hall_order_assigner(); //POSSIBLY DELETE: new order always comes as requested (FALSE), so no new order, might not need this here.
                     }
                     None => {
@@ -176,7 +176,85 @@ impl Decision {
             recvd_broadcast_message = network_elev_info_rx_guard.recv() => {
                 match recvd_broadcast_message {
                     Some(recvd) => {
+                        //1. handle elevatros states
+                        {
+                            let mut local_broadcast = self.local_broadcastmessage.write().await;
+                            
+                            for (id, state) in recvd.states.iter() {
+                                if id != &self.local_id { //keep local state
+                                    local_broadcast.states.insert(id.clone(), state.clone());
+                                }
+                            }
+                        }
 
+                        //2. handle cab orders
+                        {
+                            let mut local_broadcast = self.local_broadcastmessage.write().await;
+
+                            for (elev_id, orders) in recvd.orders.iter() {
+                                for order in orders {
+                                    if order.call == 2 {
+                                        if elev_id != &self.local_id {
+                                            local_broadcast.orders.insert(elev_id.clone(), orders.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        //3. handle hall order logic
+                        {
+                            let mut local_msg = self.local_broadcastmessage.write().await;
+
+                            for (elev_id, received_orders) in &recvd.orders {
+                                for received_order in received_orders {
+                                    if received_order.call == 0 || received_order.call == 1 {
+                                        let mut found = false;
+                    
+                                        for (_, local_orders) in local_msg.orders.iter_mut() {
+                                            for local_order in local_orders.iter_mut() {
+                                                if local_order.floor == received_order.floor
+                                                    && local_order.call == received_order.call
+                                                {
+                                                    found = true;
+                                                    local_order.barrier.insert(self.local_id.clone());
+                    
+                                                    match local_order.status {
+                                                        OrderStatus::Noorder => {
+                                                            if received_order.status == OrderStatus::Requested {
+                                                                local_order.status = OrderStatus::Requested;
+                                                            } else if received_order.status == OrderStatus::Confirmed {
+                                                                local_order.status = OrderStatus::Confirmed;
+                                                            }
+                                                        }
+                                                        OrderStatus::Requested | OrderStatus::Completed => {
+                                                        }
+                                                        OrderStatus::Confirmed => {
+                                                            if received_order.status == OrderStatus::Completed {
+                                                                local_order.status = OrderStatus::Completed;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                    
+                                        if !found {
+                                            local_msg.orders.entry(self.local_id.clone())
+                                                .or_insert_with(Vec::new)
+                                                .push(received_order.clone());
+                                        }
+                                    }
+                                }
+                            }
+                    
+                            for (id, state) in recvd.states { //merging
+                                local_msg.states.insert(id, state);
+                            }
+                        }
+
+                        self.hall_order_assigner().await;
+                        
                     }
                     None => {
                         println!("network_elev_info_rx channel closed.");
@@ -236,6 +314,7 @@ impl Decision {
                     order.barrier.clear();
                     status_changed = true;
                 }
+
             }
         }
         if status_changed {
@@ -250,6 +329,12 @@ impl Decision {
                     order.barrier.clear();
                 }
             }
+        }
+
+        //braodcasting message
+        let local_msg = self.local_broadcastmessage.read().await.clone(); 
+        if let Err(e) = self.network_elev_info_tx.lock().await.send(local_msg).await {
+            eprintln!("Failed to send message: {:?}", e);
         }
 
     }
