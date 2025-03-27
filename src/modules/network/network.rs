@@ -1,12 +1,11 @@
 
 use crate::modules::common::*;
-use std::net::{UdpSocket, IpAddr, Ipv4Addr,SocketAddrV4};
-use serde::{Serialize, Deserialize};
+use tokio::sync::mpsc::{Sender, Receiver};
+use std::net::{UdpSocket, Ipv4Addr,SocketAddrV4};
 use serde_json;
-use std::collections::{VecDeque, HashMap};
-use std::str;
-use std::hash::{Hash, Hasher};
 use local_ip_address::local_ip;
+use std::sync::{Arc, Mutex};
+use std::time::{Instant, Duration};
 use md5;
 
 //====GenerateIDs====//
@@ -22,7 +21,6 @@ pub fn generateIDs() -> Option<String>{
 }
 
 //====ClientEnd====//
-
 pub fn UDPBroadcast(message: &BroadcastMessage){
     let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to find socket");
 
@@ -35,11 +33,7 @@ pub fn UDPBroadcast(message: &BroadcastMessage){
 }
 
 //====ServerEnd====//
-
-pub fn UDPlistener() -> Option<BroadcastMessage>{
-    let socket = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
-
-    println!("UDP listening on port 30000");
+pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
 
     let mut buffer = [0; 1024];
 
@@ -53,7 +47,63 @@ pub fn UDPlistener() -> Option<BroadcastMessage>{
         }
     };
 
+    if message.source_id != SYSTEM_ID {
+        println!("Received message from unexpectrd peer: {}", message.source_id);
+        return None;
+    }
+
     Some(message)
 }
+
+//====HeartBeat====//
+
+pub fn monitor_elevators(
+    socket: UdpSocket,
+    decision_tx: Sender<AliveDeadInfo>,
+    alive_dead_info: Arc<Mutex<AliveDeadInfo>>,
+    timeout_duration: Duration,
+){
+    loop {
+        match UDPlistener(&socket) {
+            Some(message) => {
+                let mut alive_dead_info = alive_dead_info.lock().unwrap();
+
+                if !alive_dead_info.last_heartbeat.contains_key(&message.source_id) {
+                    alive_dead_info.update_elevator_status(message.source_id.clone(), true);
+                    alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
+                } 
+                
+                else {
+                    alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
+                }
+
+                let now = Instant::now();                
+                // Collect the ids that have expired
+                let expired_ids: Vec<_> = alive_dead_info.last_heartbeat
+                .iter()
+                .filter_map(|(id, last_heartbeat)| {
+                    if now.duration_since(*last_heartbeat) > timeout_duration {
+                        Some(id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+                for id in expired_ids {
+                    alive_dead_info.update_elevator_status(id.clone(), false);
+                    alive_dead_info.last_heartbeat.remove(&id);
+                }
+
+                decision_tx.send(alive_dead_info.clone());
+            }
+            None => {
+                continue;
+            }
+        }
+    }
+}
+            
+
 
 

@@ -1,4 +1,13 @@
 use serde::{Serialize, Deserialize};
+use std::time::{Duration, Instant};
+use std::collections::HashMap;
+use std::collections::HashSet;
+
+
+
+pub const SYSTEM_ID: &str = "Delulu";
+pub const NUM_OF_FLOORS:u8 = 4;
+pub const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
@@ -16,7 +25,7 @@ pub struct Order {
     pub call: u8, // 0 - up, 1 - down, 2 - cab
     pub floor: u8, //1,2,3,4
     pub status: OrderStatus,
-    pub aq_ids: Vec<String>, //barrier for requested->confirmed & confirmed->norder
+    pub barrier: HashSet<String>, //barrier for requested->confirmed & confirmed->norder
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -30,10 +39,24 @@ pub enum OrderStatus {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)] 
 pub struct BroadcastMessage {
+    pub source_id: String,
     pub version: u64, //like order ID but for the whole broadcast message
-    pub hallRequests: std::collections::HashMap<String, Vec<HallOrder>>, //elevID, hallOrders
+    pub orders: std::collections::HashMap<String, Vec<Order>>, //elevID, hallOrders
     pub states: std::collections::HashMap<String, ElevatorState> //same as in elevator system
 }
+
+impl BroadcastMessage {
+    pub fn new(version: u64) -> Self {
+        BroadcastMessage {
+            source_id: String::from(SYSTEM_ID),
+            version : version,
+            orders: HashMap::new(),
+            states: std::collections::HashMap::new(),
+        }
+    }
+}
+
+
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
 pub struct ElevatorSystem { //very local, basically only for order assigner executable
@@ -54,3 +77,27 @@ pub enum Behaviour {
     doorOpen
 }
 
+#[derive(Debug, Clone)]
+pub struct ElevatorStatus {
+    pub id: String,
+    pub is_alive: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct AliveDeadInfo {
+    pub elevators: HashMap<String, ElevatorStatus>,
+    pub last_heartbeat: HashMap<String, Instant>,
+}
+
+impl AliveDeadInfo {
+    pub fn new() -> Self {
+        AliveDeadInfo {
+            elevators: HashMap::new(),
+            last_heartbeat: HashMap::new(),
+        }
+    }
+
+    pub fn update_elevator_status(&mut self, id: String, is_alive: bool) {
+        self.elevators.insert(id.clone(), ElevatorStatus { id, is_alive });
+    }
+}
