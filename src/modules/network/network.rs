@@ -100,7 +100,7 @@ pub async fn network_reciver(
                     alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
                 }
                 //Send BroadcastMessage to decision
-                let _ = network_to_decision_tx.send(message.clone()).await;
+                network_to_decision_tx.send(message.clone()).await;
 
                 // Collect the ids that have expired
                 let now = Instant::now();                
@@ -120,7 +120,7 @@ pub async fn network_reciver(
                     alive_dead_info.last_heartbeat.remove(&id);
                 }
 
-                let _ = network_alive_tx.send(alive_dead_info.clone()).await;
+                network_alive_tx.send(alive_dead_info.clone()).await;
             }
             None => {
                 continue;
