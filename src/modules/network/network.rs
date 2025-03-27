@@ -57,7 +57,7 @@ pub async fn network_sender(
 //====ServerEnd====//
 pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
     //println!("Listening for UDP broadcast messages on port 30000");
-    let mut buffer = [0; 1024];
+    let mut buffer = [0; 65507];
 
     let(size, source) = socket.recv_from(&mut buffer).expect("Failed to receive data");
     
@@ -100,7 +100,7 @@ pub async fn network_reciver(
                     alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
                 }
                 //Send BroadcastMessage to decision
-                network_to_decision_tx.send(message.clone());
+                let _ = network_to_decision_tx.send(message.clone()).await;
 
                 // Collect the ids that have expired
                 let now = Instant::now();                
@@ -120,7 +120,7 @@ pub async fn network_reciver(
                     alive_dead_info.last_heartbeat.remove(&id);
                 }
 
-                network_alive_tx.send(alive_dead_info.clone()).await;
+                let _ = network_alive_tx.send(alive_dead_info.clone()).await;
             }
             None => {
                 continue;
