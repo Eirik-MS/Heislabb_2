@@ -21,7 +21,7 @@ use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
 
 const NUM_OF_FLOORS:u8 = 4;
-const UPDATE_INTERVAL:Duration = Duration::from_millis(200); //ms
+const UPDATE_INTERVAL:Duration = Duration::from_millis(10); //ms
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -92,7 +92,7 @@ async fn main() -> std::io::Result<()> {
     //let udp_socekt_reciver = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
     //let udp_socket_sender = UdpSocket::bind(socket_addr).expect("Failed to bind socket");
 
-    let mut udp_socket_sender = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket");
+    let udp_socket_sender = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket");
     udp_socket_sender.set_broadcast(true).expect("Failed to enable UDP broadcast");
     let udp_socket_reciver  = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind receiving socket");
     udp_socket_reciver.set_broadcast(true).expect("Failed to enable UDP broadcast");

@@ -37,7 +37,7 @@ pub async fn network_sender(
     loop {
         match decision_to_network_rx.recv().await {
             Some(message) => {
-                //println!("Sending message");
+                println!("Sending message");
                 //socket.set_broadcast(true).expect("Failed to enable UDP broadcast");
 
                 let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30000);
@@ -90,7 +90,7 @@ pub async fn network_reciver(
     loop {
         match UDPlistener(&socket) {
             Some(message) => {
-                //println!("Received message: {:#?}", message);
+                println!("Received message: {:#?}", message);
                 if !alive_dead_info.last_heartbeat.contains_key(&message.source_id) {
                     alive_dead_info.update_elevator_status(message.source_id.clone(), true);
                     alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
