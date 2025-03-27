@@ -79,18 +79,21 @@ impl Decision {
     // ALIVE elevators have attached ID in order's barrier, then we move
     // however, we still jump to confirmed without barrier (kinda obvious)
     pub async fn step(&mut self) { 
+        println!("in step");
 
-        //------------------------------------------------------------------
-        // Lock first to ensure the guard lives long enough to be used
+        let mut local_msg_copy = {
+            let read_guard = self.local_broadcastmessage.read().await;
+            read_guard.clone()
+        };
 
-        tokio::select! {
+        tokio::select! {    
             //---------ELEVATOR COMMUNICATION--------------------//
             new_order = self.new_order_rx.recv() => {
                 match new_order {
                     Some(order) => {
                         println!("New order received: {:?}", order);
-                        self.handle_new_order(order);
-                        self.hall_order_assigner().await; 
+                        local_msg_copy = self.handle_new_order(order, local_msg_copy).await;
+                        local_msg_copy = self.hall_order_assigner(local_msg_copy).await; 
                     }
                     None => {
                         println!("new_order_rx channel closed.");
@@ -101,8 +104,8 @@ impl Decision {
             order_completed = self.order_completed_rx.recv() => {
                 match order_completed {
                     Some(completed_floor) => {
-                        self.handle_order_completed(completed_floor).await;
-                        self.hall_order_assigner().await;
+                        local_msg_copy = self.handle_order_completed(completed_floor, local_msg_copy).await;
+                        local_msg_copy = self.hall_order_assigner(local_msg_copy).await;
                     }
                     None => {
                         println!("order_completed_rx channel closed.");
@@ -117,10 +120,10 @@ impl Decision {
                         {
                             println!("New state received.");
                             let new_state = self.new_elev_state_rx.borrow().clone();
-                            let mut broadcast_message = self.local_broadcastmessage.write().await;
-                            broadcast_message.states.insert(self.local_id.clone(), new_state); // we are the only source of truth
+                            local_msg_copy.states.insert(self.local_id.clone(), new_state);
+                            local_msg_copy = self.hall_order_assigner(local_msg_copy).await; // we are the only source of truth
                         }
-                        self.hall_order_assigner().await;
+                        local_msg_copy = self.hall_order_assigner(local_msg_copy).await;
                     }
                     Err(_) => {
                         println!("new_elev_state_rx channel closed.");
@@ -131,10 +134,11 @@ impl Decision {
 
             //---------NETWORK COMMUNICATION--------------------//
             recvd_broadcast_message = self.network_elev_info_rx.recv() => {
+                println!("New broadcast message received");
                 match recvd_broadcast_message {
                     Some(recvd) => {
-                        self.handle_recv_broadcast(recvd).await;
-                        self.hall_order_assigner().await;
+                        local_msg_copy = self.handle_recv_broadcast(recvd, local_msg_copy).await;
+                        local_msg_copy = self.hall_order_assigner(local_msg_copy).await;
                         
                     }
                     None => {
@@ -147,7 +151,7 @@ impl Decision {
                 match recvd_deadalive {
                     Some(deadalive) => {
                         if self.update_dead_alive_status(deadalive).await {
-                            self.hall_order_assigner().await;
+                            local_msg_copy = self.hall_order_assigner(local_msg_copy).await;
                         }
                     }
                     None => {
@@ -158,7 +162,7 @@ impl Decision {
         }
 
  
-        self.handle_barrier().await;;
+        local_msg_copy = self.handle_barrier(local_msg_copy).await;;
         
         //braodcasting message
         let local_msg = self.local_broadcastmessage.read().await.clone(); 
@@ -166,12 +170,18 @@ impl Decision {
             eprintln!("Failed to send message: {:?}", e);
         }
 
+
+        {
+            let mut write_guard = self.local_broadcastmessage.write().await;
+            *write_guard = local_msg_copy;
+        }
+
     }
 
-    async fn handle_new_order(&self, order: Order) {
+    async fn handle_new_order(&self, order: Order, mut broadcast_message: BroadcastMessage) -> BroadcastMessage {
         println!("New order received: {:?}", order);
 
-        let mut broadcast_message = self.local_broadcastmessage.write().await;
+       // let mut broadcast_message = self.local_broadcastmessage.write().await;
 
         let order_exists = match order.call {
             0 | 1 => { // HALL order
@@ -206,12 +216,14 @@ impl Decision {
 
             orders.push(new_order);
         }
+
+        broadcast_message
     }
 
-    async fn handle_order_completed(&self, completed_floor: u8) {
+    async fn handle_order_completed(&self, completed_floor: u8, mut broadcast_message: BroadcastMessage) -> BroadcastMessage {
         println!("Order completed: {}", completed_floor);
         
-        let mut broadcast_message = self.local_broadcastmessage.write().await;
+       // let mut broadcast_message = self.local_broadcastmessage.write().await;
 
         if let Some(orders) = broadcast_message.orders.get_mut(&self.local_id) { //iterate my orders
             for order in orders.iter_mut() {
@@ -225,12 +237,13 @@ impl Decision {
                 }
             }
         }
+        broadcast_message
     }
 
-    async fn handle_recv_broadcast(&self, recvd: BroadcastMessage) {
+    async fn handle_recv_broadcast(&self, recvd: BroadcastMessage, mut local_broadcast: BroadcastMessage) -> BroadcastMessage  {
         //1. handle elevatros states
         {
-            let mut local_broadcast = self.local_broadcastmessage.write().await;
+         //   let mut local_broadcast = self.local_broadcastmessage.write().await;
             
             for (id, state) in recvd.states.iter() {
                 if id != &self.local_id { //keep local state
@@ -241,7 +254,7 @@ impl Decision {
 
         //2. handle cab orders
         {
-            let mut local_broadcast = self.local_broadcastmessage.write().await;
+          //  let mut local_broadcast = self.local_broadcastmessage.write().await;
 
             for (elev_id, orders) in recvd.orders.iter() {
                 for order in orders {
@@ -256,14 +269,14 @@ impl Decision {
 
         //3. handle hall order logic
         {
-            let mut local_msg = self.local_broadcastmessage.write().await;
+          //  let mut local_msg = self.local_broadcastmessage.write().await;
 
             for (elev_id, received_orders) in &recvd.orders {
                 for received_order in received_orders {
                     if received_order.call == 0 || received_order.call == 1 {
                         let mut found = false;
 
-                        for (_, local_orders) in local_msg.orders.iter_mut() {
+                        for (_, local_orders) in local_broadcast.orders.iter_mut() {
                             for local_order in local_orders.iter_mut() {
                                 if local_order.floor == received_order.floor
                                     && local_order.call == received_order.call
@@ -292,7 +305,7 @@ impl Decision {
                         }
 
                         if !found {
-                            local_msg.orders.entry(self.local_id.clone())
+                            local_broadcast.orders.entry(self.local_id.clone())
                                 .or_insert_with(Vec::new)
                                 .push(received_order.clone());
                         }
@@ -301,9 +314,10 @@ impl Decision {
             }
 
             for (id, state) in recvd.states { //merging
-                local_msg.states.insert(id, state);
+                local_broadcast.states.insert(id, state);
             }
         }
+        local_broadcast
     }
 
     async fn update_dead_alive_status(&self, deadalive: AliveDeadInfo) -> bool {
@@ -330,7 +344,7 @@ impl Decision {
         modified
     }
 
-    async fn handle_barrier(&self) -> bool {
+    async fn handle_barrier(&self, mut broadcast_msg: BroadcastMessage) -> BroadcastMessage {
        //check that we can move from requested to confirmed, if yes change status, call hall assigner, clean barrier (CAN THIS BE AN ISSUE?)
        let mut status_changed = false; //flag
 
@@ -341,7 +355,7 @@ impl Decision {
                .map(|(id, _)| id.clone())
                .collect();
        
-           let mut broadcast_msg = self.local_broadcastmessage.write().await;
+          // let mut broadcast_msg = self.local_broadcastmessage.write().await;
            for (_elev_id, orders) in &mut broadcast_msg.orders {
                for order in orders.iter_mut() {
                    //println!("Checking order: {:?}", order);
@@ -380,16 +394,22 @@ impl Decision {
                }
            }
        }
-       status_changed
+
+       if status_changed {
+        //call hall assigner here
+        return self.hall_order_assigner(broadcast_msg).await;
+       }
+       
+       broadcast_msg
     }
 
-    pub async fn hall_order_assigner(& self) { //check if mut is needed here
+    pub async fn hall_order_assigner(& self, mut broadcast: BroadcastMessage) -> BroadcastMessage{ //check if mut is needed here
         //1. map broadcast Message to Elevator system struct
         //take even dead elevators? and then reassign orders
         //status assigned stays but elevators take possibly diff orders
         //println!("Hall order assigner called.");
-        let mut broadcast = self.local_broadcastmessage.write().await;
-        println!("Broadcast message: {:?}", *broadcast);
+       // let mut broadcast = self.local_broadcastmessage.write().await;
+        println!("Broadcast message: {:?}", broadcast);
         let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
         let mut states = std::collections::HashMap::new();
         //println!("Temp created.");
@@ -474,9 +494,9 @@ impl Decision {
             let hra_output: HashMap<String, Vec<Vec<bool>>> = serde_json::from_str(&hra_output_str)
                 .expect("Failed to deserialize hra_output");
         
-            for (elev_id, floors) in &hra_output {
-                println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
-            }
+            // for (elev_id, floors) in &hra_output {
+            //     println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
+            // }
 
             // 3. update local broadcast message according to the return value of executable - hra_output
             for (new_elevator_id, orders) in hra_output.iter() {
@@ -534,6 +554,7 @@ impl Decision {
         }
 
         println!("Hall order assigner finished.");
+        broadcast
 
     }
 }
