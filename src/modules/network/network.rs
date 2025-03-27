@@ -3,7 +3,7 @@ use crate::modules::common::*;
 use tokio::sync::mpsc::{Sender, Receiver};
 use std::net::{UdpSocket, Ipv4Addr,SocketAddrV4};
 use serde_json;
-use local_ip_address::local_ip;
+use if_addrs::get_if_addrs;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, Duration};
 use md5;
@@ -11,17 +11,24 @@ use md5;
 //====GenerateIDs====//
 
 fn get_ip() -> Option<String> {
-    local_ip().ok().map(|ip| ip.to_string())
+    if let Ok(ifaces) = get_if_addrs() {
+        for iface in ifaces {
+            if !iface.is_loopback() && iface.ip().is_ipv4() {
+                return Some(iface.ip().to_string());
+            }
+        }
+    }
+    None
 }
 
 pub fn generateIDs() -> Option<String>{
+    // If no IP is found, this will panic with a message.
     let ip = get_ip().expect("Failed to get local IP");
     let id = md5::compute(ip);
-    Some(format!{"{:x}", id})
+    Some(format!("{:x}", id))
 }
 
 //====ClientEnd====//
-
 pub fn UDPBroadcast(message: &BroadcastMessage){
     let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to find socket");
 
