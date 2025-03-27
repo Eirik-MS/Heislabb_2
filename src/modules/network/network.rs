@@ -11,7 +11,7 @@ use md5;
 
 //====GenerateIDs====//
 
-fn get_ip() -> Option<String> {
+pub fn get_ip() -> Option<String> {
     if let Ok(ifaces) = get_if_addrs() {
         for iface in ifaces {
             if !iface.is_loopback() && iface.ip().is_ipv4() {
@@ -27,29 +27,6 @@ pub fn generateIDs() -> Option<String>{
     let ip = get_ip().expect("Failed to get local IP");
     let id = md5::compute(ip);
     Some(format!("{:x}", id))
-}
-
-//====ServerEnd====//
-pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
-
-    let mut buffer = [0; 1024];
-
-    let(size, source) = socket.recv_from(&mut buffer).expect("Failed to receive data");
-    
-    let message: BroadcastMessage = match serde_json::from_slice(&buffer[..size]){
-        Ok(msg) => msg,
-        Err(e) => {
-            println!("Failed to deserialize message: {}", e);
-            return None;
-        }
-    };
-
-    if message.source_id != SYSTEM_ID {
-        println!("Received message from unexpectrd peer: {}", message.source_id);
-        return None;
-    }
-
-    Some(message)
 }
 
 pub async fn network_sender(
@@ -75,6 +52,29 @@ pub async fn network_sender(
     }
 }
 
+//====ServerEnd====//
+pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
+    //println!("Listening for UDP broadcast messages on port 30000");
+    let mut buffer = [0; 65507];
+
+    let(size, source) = socket.recv_from(&mut buffer).expect("Failed to receive data");
+    
+    let message: BroadcastMessage = match serde_json::from_slice(&buffer[..size]){
+        Ok(msg) => msg,
+        Err(e) => {
+            println!("Failed to deserialize message: {}", e);
+            return None;
+        }
+    };
+
+    if message.source_id != SYSTEM_ID {
+        println!("Received message from unexpectrd peer: {}", message.source_id);
+        return None;
+    }
+
+    Some(message)
+}
+
 //====HeartBeat====//
 pub async fn network_reciver(
     socket: UdpSocket,
@@ -82,12 +82,13 @@ pub async fn network_reciver(
     network_alive_tx: Sender<AliveDeadInfo>,
     timeout_duration: Duration,
 ){
+    println!("Started networking receiver task");
     let mut alive_dead_info = AliveDeadInfo::new();
 
     loop {
         match UDPlistener(&socket) {
             Some(message) => {
-
+                //println!("Received message: {:#?}", message);
                 if !alive_dead_info.last_heartbeat.contains_key(&message.source_id) {
                     alive_dead_info.update_elevator_status(message.source_id.clone(), true);
                     alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());

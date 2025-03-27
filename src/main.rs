@@ -86,7 +86,7 @@ async fn main() -> std::io::Result<()> {
 
     // Setup network
     //let udp_socket = setup_udp_socket().await.unwrap();
-    let udp_socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to find socket");
+    let udp_socket = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
     let udp_socekt_clone = udp_socket.try_clone().expect("Failed to clone socket");
 
     // Spawn network tasks
