@@ -17,6 +17,7 @@ pub struct ElevatorState {
     pub current_direction: u8,
     pub prev_direction: u8,
     pub emergency_stop: bool,
+    pub obstruction: bool,
     pub door_open: bool, //
 }
 
@@ -55,8 +56,6 @@ impl BroadcastMessage {
         }
     }
 }
-
-
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
 pub struct ElevatorSystem { //very local, basically only for order assigner executable

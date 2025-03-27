@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::time::{ Instant};
 use std::process::{Command, Stdio};
 use tokio::time::{sleep, Duration};
-use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::sync::{watch, Mutex, RwLock, mpsc};
 use tokio::sync::mpsc::{Sender,Receiver};
 use driver_rust::elevio::elev as e;
 const MAX_FLOORS: usize = 4; //IMPORT FROM MAIN
@@ -21,7 +21,6 @@ const MAX_FLOORS: usize = 4; //IMPORT FROM MAIN
 // honestly the only reason we transfer cab orders globally is to use executable
 // otherwise they are managed locally since other elevators are not modifying or
 // taking over them, if elev dies, cab orders die too... 
-// TODO: maybe we need backup? maybe not
 
 
 
@@ -36,10 +35,11 @@ pub struct Decision {
     network_elev_info_rx: Mutex<mpsc::Receiver<BroadcastMessage>>,
     network_alivedead_rx: Mutex<mpsc::Receiver<AliveDeadInfo>>,
     //OTEHRS/UNSURE
-    new_elev_state_rx: Mutex<mpsc::Receiver<ElevatorState>>, //state to modify
+    new_elev_state_rx: Mutex<watch::Receiver<ElevatorState>>, //state to modify
     order_completed_rx: Mutex<mpsc::Receiver<u8>>, //elevator floor
     new_order_rx: Mutex<mpsc::Receiver<Order>>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
     elevator_assigned_orders_tx: mpsc::Sender<Order>, //one order only actually, s is typo
+    orders_recived_confirmed_tx: mpsc::Sender<Order>, //send to network
 }
 
 impl Decision {
@@ -50,10 +50,11 @@ impl Decision {
         network_elev_info_rx: Receiver<BroadcastMessage>,
         network_alivedead_rx: Receiver<AliveDeadInfo>,
 
-        new_elev_state_rx: Receiver<ElevatorState>,
+        new_elev_state_rx: watch::Receiver<ElevatorState>,
         order_completed_rx: Receiver<u8>,
         new_order_rx: Receiver<Order>,
         elevator_assigned_orders_tx: mpsc::Sender<Order>,
+        orders_recived_confirmed_tx: mpsc::Sender<Order>,
     ) -> Self {
         Decision {
             local_id,
@@ -68,6 +69,7 @@ impl Decision {
             order_completed_rx: Mutex::new(order_completed_rx),
             new_order_rx: Mutex::new(new_order_rx),
             elevator_assigned_orders_tx,
+            orders_recived_confirmed_tx: orders_recived_confirmed_tx,
         }
     }
 
@@ -169,16 +171,18 @@ impl Decision {
             },
 
 
-            new_elev_state = new_elev_state_rx_guard.recv() => {
-                match new_elev_state {
-                    Some(new_state) => {
+            result = new_elev_state_rx_guard.changed() => {
+                match result {
+                    Ok(()) => {
+                        //println!("New state received.");
+                        let new_state = new_elev_state_rx_guard.borrow().clone();
                         let mut broadcast_message = self.local_broadcastmessage.write().await;
                         broadcast_message.states.insert(self.local_id.clone(), new_state);
-                        //println!("Updated broadcast message: {:?}", *broadcast_message);
                     }
-                    None => {
+                    Err(_) => {
                         println!("new_elev_state_rx channel closed.");
                     }
+                    
                 }
             },
 
@@ -186,7 +190,85 @@ impl Decision {
             recvd_broadcast_message = network_elev_info_rx_guard.recv() => {
                 match recvd_broadcast_message {
                     Some(recvd) => {
+                        //1. handle elevatros states
+                        {
+                            let mut local_broadcast = self.local_broadcastmessage.write().await;
+                            
+                            for (id, state) in recvd.states.iter() {
+                                if id != &self.local_id { //keep local state
+                                    local_broadcast.states.insert(id.clone(), state.clone());
+                                }
+                            }
+                        }
 
+                        //2. handle cab orders
+                        {
+                            let mut local_broadcast = self.local_broadcastmessage.write().await;
+
+                            for (elev_id, orders) in recvd.orders.iter() {
+                                for order in orders {
+                                    if order.call == 2 {
+                                        if elev_id != &self.local_id {
+                                            local_broadcast.orders.insert(elev_id.clone(), orders.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        //3. handle hall order logic
+                        {
+                            let mut local_msg = self.local_broadcastmessage.write().await;
+
+                            for (elev_id, received_orders) in &recvd.orders {
+                                for received_order in received_orders {
+                                    if received_order.call == 0 || received_order.call == 1 {
+                                        let mut found = false;
+                    
+                                        for (_, local_orders) in local_msg.orders.iter_mut() {
+                                            for local_order in local_orders.iter_mut() {
+                                                if local_order.floor == received_order.floor
+                                                    && local_order.call == received_order.call
+                                                {
+                                                    found = true;
+                                                    local_order.barrier.insert(self.local_id.clone());
+                    
+                                                    match local_order.status {
+                                                        OrderStatus::Noorder => {
+                                                            if received_order.status == OrderStatus::Requested {
+                                                                local_order.status = OrderStatus::Requested;
+                                                            } else if received_order.status == OrderStatus::Confirmed {
+                                                                local_order.status = OrderStatus::Confirmed;
+                                                            }
+                                                        }
+                                                        OrderStatus::Requested | OrderStatus::Completed => {
+                                                        }
+                                                        OrderStatus::Confirmed => {
+                                                            if received_order.status == OrderStatus::Completed {
+                                                                local_order.status = OrderStatus::Completed;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                    
+                                        if !found {
+                                            local_msg.orders.entry(self.local_id.clone())
+                                                .or_insert_with(Vec::new)
+                                                .push(received_order.clone());
+                                        }
+                                    }
+                                }
+                            }
+                    
+                            for (id, state) in recvd.states { //merging
+                                local_msg.states.insert(id, state);
+                            }
+                        }
+
+                        self.hall_order_assigner().await;
+                        
                     }
                     None => {
                         println!("network_elev_info_rx channel closed.");
@@ -247,13 +329,16 @@ impl Decision {
                         order.status = OrderStatus::Confirmed;
                         order.barrier.clear();
                         status_changed = true;
+                        self.orders_recived_confirmed_tx.send(order.clone()).await.unwrap();
                     }
                     if order.status == OrderStatus::Requested && order.call == 2 && order.barrier.is_empty() {
                         println!("CAB order without barrier, setting to confirmed.");
                         order.status = OrderStatus::Confirmed;
                         status_changed = true;
+                        self.orders_recived_confirmed_tx.send(order.clone()).await.unwrap();
                     }
                 }
+
             }
         }
         if status_changed {
@@ -277,18 +362,25 @@ impl Decision {
                 }
             }
         }
+
+        //braodcasting message
+        let local_msg = self.local_broadcastmessage.read().await.clone(); 
+        if let Err(e) = self.network_elev_info_tx.lock().await.send(local_msg).await {
+            eprintln!("Failed to send message: {:?}", e);
+        }
+
     }
 
     pub async fn hall_order_assigner(& self) { //check if mut is needed here
         //1. map broadcast Message to Elevator system struct
         //take even dead elevators? and then reassign orders
         //status assigned stays but elevators take possibly diff orders
-        println!("Hall order assigner called.");
+        //println!("Hall order assigner called.");
         let mut broadcast = self.local_broadcastmessage.write().await;
         println!("Broadcast message: {:?}", *broadcast);
         let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
         let mut states = std::collections::HashMap::new();
-        println!("Temp created.");
+        //println!("Temp created.");
         //1.1 map hall orders
         for orders in broadcast.orders.values() {
             for order in orders {
@@ -305,9 +397,9 @@ impl Decision {
                 state dorropen
             else idle
         */
-        println!("Check other elevators");
+        //println!("Check other elevators");
         for (id, state) in &broadcast.states {
-            println!("Checking elevator: {}", id);
+            //println!("Checking elevator: {}", id);
             let dead_elevators = self.dead_elev.lock().await;  
             if let Some(true) = dead_elevators.get(id) {
                 println!("Elevator {} is dead, skipping.", id);
@@ -323,7 +415,7 @@ impl Decision {
                 })
             })
             .collect();
-            println!("Cab requests: {:?}", cab_requests);
+            //println!("Cab requests: {:?}", cab_requests);
         
             let behaviour = if state.door_open {
                 "doorOpen"
