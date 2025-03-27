@@ -94,7 +94,8 @@ async fn main() -> std::io::Result<()> {
 
     let mut udp_socket_sender = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket");
     udp_socket_sender.set_broadcast(true).expect("Failed to enable UDP broadcast");
-    let udp_socket_reciver  = udp_socket_sender.try_clone().expect("Failed to clone socket");
+    let udp_socket_reciver  = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind receiving socket");
+    udp_socket_reciver.set_broadcast(true).expect("Failed to enable UDP broadcast");
 
 
     // Spawn network tasks
