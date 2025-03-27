@@ -24,10 +24,9 @@ const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     // Get the local IP address
-    //let elevator_id: String = local_ip().expect("Failed to get local IP address").to_string();
-    //println!("Elevator ID: {}", elevator_id);
-    let elevator_id: String = "elevator1".to_string();
-    
+    let elevator_id: String = generateIDs().expect("Failed to generate ID");
+    println!("Elevator ID: {}", elevator_id);
+
     // Create a dummy state to initialize the watch channel propperly
     let dummystate = ElevatorState {
         current_floor: u8::MAX,
