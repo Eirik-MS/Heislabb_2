@@ -95,46 +95,8 @@ impl Decision {
                 match new_order {
                     Some(order) => {
                         println!("New order received: {:?}", order);
-                        {
-                            let mut broadcast_message = self.local_broadcastmessage.write().await;
-                            // check if order already exists
-                            let order_exists = match order.call {
-                                0 | 1 => { //HALL order
-                                    println!("Checking hall order");
-                                    broadcast_message.orders.iter_mut().any(|(elevator_id, orders)| {
-                                        orders.iter().any(|existing_order| { //unqieu order per floor button pressed up/down
-                                            existing_order.floor == order.floor && 
-                                            existing_order.call == order.call &&
-                                            existing_order.status != OrderStatus::Noorder
-
-                                        })
-                                    })
-                                }
-                                2 => { //CAB
-                                    println!("Checking cab order");
-                                    broadcast_message.orders.get_mut(&self.local_id).map_or(false, |orders| {
-                                        orders.iter().any(|existing_order| 
-                                            existing_order.floor == order.floor && 
-                                            existing_order.call == order.call &&
-                                            existing_order.status != OrderStatus::Noorder
-
-                                        )
-                                    }) 
-                                }
-                                _ => false,
-                            };
-                        
-                            if !order_exists { //order was not found, add it
-                                println!("Order does not exist, adding it.");
-                                let orders = broadcast_message.orders.entry(self.local_id.clone()).or_insert(vec![]);
-                            
-                                let mut new_order = order.clone();
-                                new_order.barrier.insert(self.local_id.clone());
-
-                                orders.push(new_order);
-                            }
-                        }
-                        self.hall_order_assigner().await; //POSSIBLY DELETE: new order always comes as requested (FALSE), so no new order, might not need this here.
+                        self.handle_new_order(order);
+                        self.hall_order_assigner().await; 
                     }
                     None => {
                         println!("new_order_rx channel closed.");
@@ -145,24 +107,8 @@ impl Decision {
             order_completed = order_completed_rx_guard.recv() => {
                 match order_completed {
                     Some(completed_floor) => {
-                        {
-                            println!("Order completed: {}", completed_floor);
-                            let mut broadcast_message = self.local_broadcastmessage.write().await;
-
-                            if let Some(orders) = broadcast_message.orders.get_mut(&self.local_id) { //iterate my orders
-                                for order in orders.iter_mut() {
-                                    if order.floor == completed_floor { // everything for this floor
-                                        if order.status == OrderStatus::Confirmed { //change status if confirmed to finished
-
-                                            order.status = OrderStatus::Completed;
-                                            order.barrier.clear(); //clear barrier just in case
-                                            order.barrier.insert(self.local_id.clone());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        self.hall_order_assigner().await; //reassign since some of the are now false
+                        self.handle_order_completed(completed_floor).await;
+                        self.hall_order_assigner().await;
                     }
                     None => {
                         println!("order_completed_rx channel closed.");
@@ -174,10 +120,13 @@ impl Decision {
             result = new_elev_state_rx_guard.changed() => {
                 match result {
                     Ok(()) => {
-                        //println!("New state received.");
-                        let new_state = new_elev_state_rx_guard.borrow().clone();
-                        let mut broadcast_message = self.local_broadcastmessage.write().await;
-                        broadcast_message.states.insert(self.local_id.clone(), new_state);
+                        {
+                            println!("New state received.");
+                            let new_state = new_elev_state_rx_guard.borrow().clone();
+                            let mut broadcast_message = self.local_broadcastmessage.write().await;
+                            broadcast_message.states.insert(self.local_id.clone(), new_state); // we are the only source of truth
+                        }
+                        self.hall_order_assigner().await;
                     }
                     Err(_) => {
                         println!("new_elev_state_rx channel closed.");
@@ -190,83 +139,7 @@ impl Decision {
             recvd_broadcast_message = network_elev_info_rx_guard.recv() => {
                 match recvd_broadcast_message {
                     Some(recvd) => {
-                        //1. handle elevatros states
-                        {
-                            let mut local_broadcast = self.local_broadcastmessage.write().await;
-                            
-                            for (id, state) in recvd.states.iter() {
-                                if id != &self.local_id { //keep local state
-                                    local_broadcast.states.insert(id.clone(), state.clone());
-                                }
-                            }
-                        }
-
-                        //2. handle cab orders
-                        {
-                            let mut local_broadcast = self.local_broadcastmessage.write().await;
-
-                            for (elev_id, orders) in recvd.orders.iter() {
-                                for order in orders {
-                                    if order.call == 2 {
-                                        if elev_id != &self.local_id {
-                                            local_broadcast.orders.insert(elev_id.clone(), orders.clone());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        //3. handle hall order logic
-                        {
-                            let mut local_msg = self.local_broadcastmessage.write().await;
-
-                            for (elev_id, received_orders) in &recvd.orders {
-                                for received_order in received_orders {
-                                    if received_order.call == 0 || received_order.call == 1 {
-                                        let mut found = false;
-                    
-                                        for (_, local_orders) in local_msg.orders.iter_mut() {
-                                            for local_order in local_orders.iter_mut() {
-                                                if local_order.floor == received_order.floor
-                                                    && local_order.call == received_order.call
-                                                {
-                                                    found = true;
-                                                    local_order.barrier.insert(self.local_id.clone());
-                    
-                                                    match local_order.status {
-                                                        OrderStatus::Noorder => {
-                                                            if received_order.status == OrderStatus::Requested {
-                                                                local_order.status = OrderStatus::Requested;
-                                                            } else if received_order.status == OrderStatus::Confirmed {
-                                                                local_order.status = OrderStatus::Confirmed;
-                                                            }
-                                                        }
-                                                        OrderStatus::Requested | OrderStatus::Completed => {
-                                                        }
-                                                        OrderStatus::Confirmed => {
-                                                            if received_order.status == OrderStatus::Completed {
-                                                                local_order.status = OrderStatus::Completed;
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                    
-                                        if !found {
-                                            local_msg.orders.entry(self.local_id.clone())
-                                                .or_insert_with(Vec::new)
-                                                .push(received_order.clone());
-                                        }
-                                    }
-                                }
-                            }
-                    
-                            for (id, state) in recvd.states { //merging
-                                local_msg.states.insert(id, state);
-                            }
-                        }
-
+                        self.handle_recv_broadcast(recvd).await;
                         self.hall_order_assigner().await;
                         
                     }
@@ -279,29 +152,8 @@ impl Decision {
             recvd_deadalive = network_alivedead_rx_guard.recv() => {
                 match recvd_deadalive {
                     Some(deadalive) => {
-                        //update local deadalive
-                        let mut modified = false; 
-                        {
-                            let mut dead_elev_guard = self.dead_elev.lock().await;
-                            for (id, status) in deadalive.elevators {
-                                let entry = dead_elev_guard.entry(id.clone());
-
-                                match entry {
-                                    std::collections::hash_map::Entry::Occupied(mut o) => {
-                                        if *o.get() != status.is_alive {
-                                            o.insert(status.is_alive); 
-                                            modified = true; 
-                                        }
-                                    }
-                                    std::collections::hash_map::Entry::Vacant(v) => {
-                                        v.insert(status.is_alive);
-                                        modified = true; 
-                                    }
-                                }
-                            }
-                        }
-                        if modified {
-                            self.hall_order_assigner().await; 
+                        if self.update_dead_alive_status(deadalive).await {
+                            self.hall_order_assigner().await;
                         }
                     }
                     None => {
@@ -311,64 +163,230 @@ impl Decision {
             },
         }
 
-        //check that we can move from requested to confirmed, if yes change status, call hall assigner, clean barrier (CAN THIS BE AN ISSUE?)
-        let mut status_changed = false; //flag
-
-        {    
-            let dead_elevators = self.dead_elev.lock().await;  // Lock the Mutex
-            let alive_elevators: HashSet<String> = dead_elevators.iter()
-                .filter(|(_, &is_alive)| is_alive)
-                .map(|(id, _)| id.clone())
-                .collect();
+ 
+        self.handle_barrier().await;;
         
-            let mut broadcast_msg = self.local_broadcastmessage.write().await;
-            for (_elev_id, orders) in &mut broadcast_msg.orders {
-                for order in orders.iter_mut() {
-                    //println!("Checking order: {:?}", order);
-                    if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
-                        order.status = OrderStatus::Confirmed;
-                        order.barrier.clear();
-                        status_changed = true;
-                        self.orders_recived_confirmed_tx.send(order.clone()).await.unwrap();
-                    }
-                    if order.status == OrderStatus::Requested && order.call == 2 && order.barrier.is_empty() {
-                        println!("CAB order without barrier, setting to confirmed.");
-                        order.status = OrderStatus::Confirmed;
-                        status_changed = true;
-                        self.orders_recived_confirmed_tx.send(order.clone()).await.unwrap();
-                    }
-                }
-
-            }
-        }
-        if status_changed {
-            self.hall_order_assigner().await;
-        }
-        {
-            let mut broadcast_msg = self.local_broadcastmessage.write().await;
-            let dead_elevators = self.dead_elev.lock().await;  // Lock the Mutex
-            let alive_elevators: HashSet<String> = dead_elevators.iter()
-                .filter(|(_, &is_alive)| is_alive)
-                .map(|(id, _)| id.clone())
-                .collect();
-        
-            //check if we can move from finished to NoOrder, clean barrier
-            for (_elev_id, orders) in &mut broadcast_msg.orders {
-                for order in orders.iter_mut() {
-                    if order.status == OrderStatus::Completed && alive_elevators.is_subset(&order.barrier) {
-                        order.status = OrderStatus::Noorder;
-                        order.barrier.clear();
-                    }
-                }
-            }
-        }
-
         //braodcasting message
         let local_msg = self.local_broadcastmessage.read().await.clone(); 
         if let Err(e) = self.network_elev_info_tx.lock().await.send(local_msg).await {
             eprintln!("Failed to send message: {:?}", e);
         }
 
+    }
+
+    async fn handle_new_order(&self, order: Order) {
+        println!("New order received: {:?}", order);
+
+        let mut broadcast_message = self.local_broadcastmessage.write().await;
+
+        let order_exists = match order.call {
+            0 | 1 => { // HALL order
+                println!("Checking hall order");
+                broadcast_message.orders.iter().any(|(_, orders)| {
+                    orders.iter().any(|existing_order| {
+                        existing_order.floor == order.floor && 
+                        existing_order.call == order.call &&
+                        existing_order.status != OrderStatus::Noorder
+                    })
+                })
+            }
+            2 => { // CAB order
+                println!("Checking cab order");
+                broadcast_message.orders.get(&self.local_id).map_or(false, |orders| {
+                    orders.iter().any(|existing_order| {
+                        existing_order.floor == order.floor && 
+                        existing_order.call == order.call &&
+                        existing_order.status != OrderStatus::Noorder
+                    })
+                })
+            }
+            _ => false,
+        };
+
+        if !order_exists {
+            println!("Order does not exist, adding it.");
+            let orders = broadcast_message.orders.entry(self.local_id.clone()).or_insert(vec![]);
+
+            let mut new_order = order.clone();
+            new_order.barrier.insert(self.local_id.clone());
+
+            orders.push(new_order);
+        }
+    }
+
+    async fn handle_order_completed(&self, completed_floor: u8) {
+        println!("Order completed: {}", completed_floor);
+        
+        let mut broadcast_message = self.local_broadcastmessage.write().await;
+
+        if let Some(orders) = broadcast_message.orders.get_mut(&self.local_id) { //iterate my orders
+            for order in orders.iter_mut() {
+                if order.floor == completed_floor { // everything for this floor
+                    if order.status == OrderStatus::Confirmed { //change status if confirmed to finished
+
+                        order.status = OrderStatus::Completed;
+                        order.barrier.clear(); //clear barrier just in case
+                        order.barrier.insert(self.local_id.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    async fn handle_recv_broadcast(&self, recvd: BroadcastMessage) {
+        //1. handle elevatros states
+        {
+            let mut local_broadcast = self.local_broadcastmessage.write().await;
+            
+            for (id, state) in recvd.states.iter() {
+                if id != &self.local_id { //keep local state
+                    local_broadcast.states.insert(id.clone(), state.clone());
+                }
+            }
+        }
+
+        //2. handle cab orders
+        {
+            let mut local_broadcast = self.local_broadcastmessage.write().await;
+
+            for (elev_id, orders) in recvd.orders.iter() {
+                for order in orders {
+                    if order.call == 2 {
+                        if elev_id != &self.local_id {
+                            local_broadcast.orders.insert(elev_id.clone(), orders.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        //3. handle hall order logic
+        {
+            let mut local_msg = self.local_broadcastmessage.write().await;
+
+            for (elev_id, received_orders) in &recvd.orders {
+                for received_order in received_orders {
+                    if received_order.call == 0 || received_order.call == 1 {
+                        let mut found = false;
+
+                        for (_, local_orders) in local_msg.orders.iter_mut() {
+                            for local_order in local_orders.iter_mut() {
+                                if local_order.floor == received_order.floor
+                                    && local_order.call == received_order.call
+                                {
+                                    found = true;
+                                    local_order.barrier.insert(self.local_id.clone());
+
+                                    match local_order.status {
+                                        OrderStatus::Noorder => {
+                                            if received_order.status == OrderStatus::Requested {
+                                                local_order.status = OrderStatus::Requested;
+                                            } else if received_order.status == OrderStatus::Confirmed {
+                                                local_order.status = OrderStatus::Confirmed;
+                                            }
+                                        }
+                                        OrderStatus::Requested | OrderStatus::Completed => {
+                                        }
+                                        OrderStatus::Confirmed => {
+                                            if received_order.status == OrderStatus::Completed {
+                                                local_order.status = OrderStatus::Completed;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if !found {
+                            local_msg.orders.entry(self.local_id.clone())
+                                .or_insert_with(Vec::new)
+                                .push(received_order.clone());
+                        }
+                    }
+                }
+            }
+
+            for (id, state) in recvd.states { //merging
+                local_msg.states.insert(id, state);
+            }
+        }
+    }
+
+    async fn update_dead_alive_status(&self, deadalive: AliveDeadInfo) -> bool {
+        let mut modified = false;
+        let mut dead_elev_guard = self.dead_elev.lock().await;
+    
+        for (id, status) in deadalive.elevators {
+            let entry = dead_elev_guard.entry(id.clone());
+    
+            match entry {
+                std::collections::hash_map::Entry::Occupied(mut o) => {
+                    if *o.get() != status.is_alive {
+                        o.insert(status.is_alive);
+                        modified = true;
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(v) => {
+                    v.insert(status.is_alive);
+                    modified = true;
+                }
+            }
+        }
+    
+        modified
+    }
+
+    async fn handle_barrier(&self) -> bool {
+       //check that we can move from requested to confirmed, if yes change status, call hall assigner, clean barrier (CAN THIS BE AN ISSUE?)
+       let mut status_changed = false; //flag
+
+       {    
+           let dead_elevators = self.dead_elev.lock().await;  // Lock the Mutex
+           let alive_elevators: HashSet<String> = dead_elevators.iter()
+               .filter(|(_, &is_alive)| is_alive)
+               .map(|(id, _)| id.clone())
+               .collect();
+       
+           let mut broadcast_msg = self.local_broadcastmessage.write().await;
+           for (_elev_id, orders) in &mut broadcast_msg.orders {
+               for order in orders.iter_mut() {
+                   //println!("Checking order: {:?}", order);
+                   if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
+                       order.status = OrderStatus::Confirmed;
+                       order.barrier.clear();
+                       status_changed = true;
+                       self.orders_recived_confirmed_tx.send(order.clone()).await.unwrap();
+                   }
+                   if order.status == OrderStatus::Requested && order.call == 2 && order.barrier.is_empty() {
+                       println!("CAB order without barrier, setting to confirmed.");
+                       order.status = OrderStatus::Confirmed;
+                       status_changed = true;
+                       self.orders_recived_confirmed_tx.send(order.clone()).await.unwrap();
+                   }
+               }
+
+           }
+       }
+
+       {
+           let mut broadcast_msg = self.local_broadcastmessage.write().await;
+           let dead_elevators = self.dead_elev.lock().await;  // Lock the Mutex
+           let alive_elevators: HashSet<String> = dead_elevators.iter()
+               .filter(|(_, &is_alive)| is_alive)
+               .map(|(id, _)| id.clone())
+               .collect();
+       
+           //check if we can move from finished to NoOrder, clean barrier
+           for (_elev_id, orders) in &mut broadcast_msg.orders {
+               for order in orders.iter_mut() {
+                   if order.status == OrderStatus::Completed && alive_elevators.is_subset(&order.barrier) {
+                       order.status = OrderStatus::Noorder;
+                       order.barrier.clear();
+                   }
+               }
+           }
+       }
+       status_changed
     }
 
     pub async fn hall_order_assigner(& self) { //check if mut is needed here

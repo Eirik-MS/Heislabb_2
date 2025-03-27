@@ -234,7 +234,7 @@ impl ElevatorController {
 
             //Comunicate with other modules    
             tokio::select! {
-                msg = door_closing_rx_guard.recv().await => {
+                msg = door_closing_rx_guard.recv() => {
                     match msg {
                         Some(door_closing) => {
                             if door_closing {
