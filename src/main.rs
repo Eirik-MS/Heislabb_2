@@ -71,8 +71,8 @@ async fn main() -> std::io::Result<()> {
         
         let mut interval = interval(UPDATE_INTERVAL);
         loop {
-            interval.tick().await;
             decision.step().await;
+            std::thread::sleep(UPDATE_INTERVAL);
         }
     });
 
