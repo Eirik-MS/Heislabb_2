@@ -7,6 +7,7 @@ use modules::decision::*;
 use modules::network::*;
 use serde::de;
 use tokio::sync::watch;
+use std::net::UdpSocket;
 
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
@@ -82,6 +83,30 @@ async fn main() -> std::io::Result<()> {
             std::thread::sleep(UPDATE_INTERVAL);
         }
     });
+
+    // Setup network
+    //let udp_socket = setup_udp_socket().await.unwrap();
+    let udp_socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to find socket");
+    let udp_socekt_clone = udp_socket.try_clone().expect("Failed to clone socket");
+
+    // Spawn network tasks
+    let network_reciver_handle = tokio::spawn(async move {
+        network_reciver(
+            udp_socket,
+            network_to_decision_tx,
+            network_alive_tx,
+            Duration::from_secs(5),
+        ).await;
+    });
+
+    let network_sender_handle = tokio::spawn(async move {
+        network_sender(
+            udp_socekt_clone,
+            decision_to_network_rx,
+        ).await;
+    });
+
+
 
     // Optionally await both handles or run other tasks
     // For example, you can await one of them or use join! macro if they need to run concurrently.

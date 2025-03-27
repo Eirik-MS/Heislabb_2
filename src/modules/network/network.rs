@@ -1,6 +1,7 @@
 
 use crate::modules::common::*;
 use tokio::sync::mpsc::{Sender, Receiver};
+use core::net;
 use std::net::{UdpSocket, Ipv4Addr,SocketAddrV4};
 use serde_json;
 use if_addrs::get_if_addrs;
@@ -28,18 +29,6 @@ pub fn generateIDs() -> Option<String>{
     Some(format!("{:x}", id))
 }
 
-//====ClientEnd====//
-pub fn UDPBroadcast(message: &BroadcastMessage){
-    let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to find socket");
-
-    socket.set_broadcast(true).expect("Failed to enable UDP broadcast");
-
-    let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30000);
-    let serMessage = serde_json::to_string(&message).expect("Failed to serialize message");
-
-    socket.send_to(serMessage.as_bytes(), broadcast_addr).expect("Failed to broadcast message on port");
-}
-
 //====ServerEnd====//
 pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
 
@@ -63,18 +52,41 @@ pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
     Some(message)
 }
 
-//====HeartBeat====//
-
-pub fn monitor_elevators(
+pub async fn network_sender(
     socket: UdpSocket,
-    decision_tx: Sender<AliveDeadInfo>,
-    alive_dead_info: Arc<Mutex<AliveDeadInfo>>,
+    mut decision_to_network_rx: Receiver<BroadcastMessage>,
+){
+    loop {
+        match decision_to_network_rx.recv().await {
+            Some(message) => {
+                socket.set_broadcast(true).expect("Failed to enable UDP broadcast");
+
+                let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30000);
+                let serMessage = serde_json::to_string(&message).expect("Failed to serialize message");
+
+                socket.send_to(serMessage.as_bytes(), broadcast_addr).expect("Failed to broadcast message on port");
+            }
+            None => {
+                println!("Channel closed; no message received.");
+                // Optionally, break or continue
+                break;
+            }
+        }
+    }
+}
+
+//====HeartBeat====//
+pub async fn network_reciver(
+    socket: UdpSocket,
+    network_to_decision_tx: Sender<BroadcastMessage>,
+    network_alive_tx: Sender<AliveDeadInfo>,
     timeout_duration: Duration,
 ){
+    let mut alive_dead_info = AliveDeadInfo::new();
+
     loop {
         match UDPlistener(&socket) {
             Some(message) => {
-                let mut alive_dead_info = alive_dead_info.lock().unwrap();
 
                 if !alive_dead_info.last_heartbeat.contains_key(&message.source_id) {
                     alive_dead_info.update_elevator_status(message.source_id.clone(), true);
@@ -84,9 +96,11 @@ pub fn monitor_elevators(
                 else {
                     alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
                 }
+                //Send BroadcastMessage to decision
+                network_to_decision_tx.send(message.clone());
 
-                let now = Instant::now();                
                 // Collect the ids that have expired
+                let now = Instant::now();                
                 let expired_ids: Vec<_> = alive_dead_info.last_heartbeat
                 .iter()
                 .filter_map(|(id, last_heartbeat)| {
@@ -103,12 +117,13 @@ pub fn monitor_elevators(
                     alive_dead_info.last_heartbeat.remove(&id);
                 }
 
-                decision_tx.send(alive_dead_info.clone());
+                network_alive_tx.send(alive_dead_info.clone()).await;
             }
             None => {
                 continue;
             }
         }
+
     }
 }
             
