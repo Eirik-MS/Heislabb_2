@@ -57,7 +57,7 @@ pub async fn network_sender(
 //====ServerEnd====//
 pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
     //println!("Listening for UDP broadcast messages on port 30000");
-    let mut buffer = [0; 65507];
+    let mut buffer = [0; 65535];
 
     let(size, source) = socket.recv_from(&mut buffer).expect("Failed to receive data");
     
