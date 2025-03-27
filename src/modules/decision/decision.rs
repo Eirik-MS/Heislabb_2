@@ -315,7 +315,7 @@ impl Decision {
         let mut status_changed = false; //flag
 
         {    
-            let dead_elevators = self.dead_elev.lock().await;  // Lock the Mutex
+            let dead_elevators = self.dead_elev.lock().await; 
             let alive_elevators: HashSet<String> = dead_elevators.iter()
                 .filter(|(_, &is_alive)| is_alive)
                 .map(|(id, _)| id.clone())
@@ -341,9 +341,11 @@ impl Decision {
 
             }
         }
+
         if status_changed {
             self.hall_order_assigner().await;
         }
+
         {
             let mut broadcast_msg = self.local_broadcastmessage.write().await;
             let dead_elevators = self.dead_elev.lock().await;  // Lock the Mutex
