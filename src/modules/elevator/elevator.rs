@@ -69,6 +69,7 @@ impl ElevatorController {
                 prev_direction: e::DIRN_STOP,
                 emergency_stop: false,
                 door_open: false,
+                obstruction: false,
             })),
 
             queue: RwLock::new(Vec::<Order>::new()), 
@@ -214,13 +215,8 @@ impl ElevatorController {
                     let obstr = a.unwrap();
                     println!("Obstruction: {:#?}", obstr);
                     let mut state = self.state.write().await;
-                    if obstr {
-                        state.emergency_stop = true;
-                        self.elevator.motor_direction(e::DIRN_STOP);
-                    } else {
-                        state.emergency_stop = false;
-                        self.elevator.motor_direction(state.current_direction);
-                    }
+                    state.obstruction = obstr;
+                    
 
                 },
                 default(Duration::from_millis(100)) => {
@@ -244,9 +240,14 @@ impl ElevatorController {
                         Some(door_closing) => {
                             if door_closing {
                                 let mut state_lock = self.state.write().await;
-                                state_lock.door_open = false; // Door closed
-                                self.elevator.door_light(false);
-                                println!("Door has closed.");
+                                if state_lock.obstruction {
+                                    sleep(Duration::from_secs(3)).await;
+                                    let _ = self.door_closing_tx.send(true).await;
+                                } else {
+                                    state_lock.door_open = false; // Door closed
+                                    self.elevator.door_light(false);
+                                    println!("Door has closed.");
+                                }
                             }
                         }
                         None => {

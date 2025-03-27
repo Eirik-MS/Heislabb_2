@@ -17,6 +17,7 @@ pub struct ElevatorState {
     pub current_direction: u8,
     pub prev_direction: u8,
     pub emergency_stop: bool,
+    pub obstruction: bool,
     pub door_open: bool, //
 }
 
