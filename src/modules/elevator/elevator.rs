@@ -4,6 +4,7 @@ use std::thread::spawn;
 use tokio::time::{sleep, Duration};
 use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use std::collections::HashSet;
+use chrono::{DateTime, Utc};
 
 use crossbeam_channel as cbc;
 
@@ -147,7 +148,8 @@ impl ElevatorController {
                     let order = Order {
                         call: call_button.call,
                         floor: call_button.floor,
-                        pub timestamp: Chrono::Utc::now(),
+                        taken: 0,
+                        timestamp: Utc::now(),
                         status: OrderStatus::Requested,
                     }; 
 

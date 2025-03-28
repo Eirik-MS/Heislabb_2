@@ -46,10 +46,10 @@ async fn cost_function(hall_orders: HashSet<Order>, local_info: ElevatorState) -
             (local_info.current_direction == 1 && order.call == 1 && order.floor <= local_info.current_floor) {
             cost -= 5;
         }
-        if order.call == 2 { //low cost
-            cost = 0; //must be takesn
+        if order.call == 2 { 
+            cost = 0; 
         }
-        if order.timestamp < now { //low cost
+        if order.timestamp < now {
             cost = 0;
         }
         filtered_orders.insert(OrderCost { order, cost });
@@ -99,39 +99,6 @@ async fn main() -> std::io::Result<()> {
         });
     });
 
-    // Spawn decision task
-    let decision_handle = tokio::spawn(async move {
-        let decision = Decision::new(
-            elevator_id,
-            decision_to_network_tx,
-            network_to_decision_rx,
-            network_alive_rx,
-            elevator_state_rx,
-            orders_completed_rx,
-            new_orders_from_elevator_rx,
-            elevator_assigned_orders_tx,
-            orders_confirmed_tx,
-            
-        );
-
-        let local_msg = self.local_broadcastmessage.read().await.clone(); 
-        if let Err(e) = self.network_elev_info_tx.lock().await.send(local_msg).await {
-            eprintln!("Failed to send message: {:?}", e);
-        }
-        
-        let mut interval = interval(UPDATE_INTERVAL);
-        loop {
-            decision.step().await;
-            std::thread::sleep(UPDATE_INTERVAL);
-        }
-    });
-
-    // Setup network
-    //let udp_socket = setup_udp_socket().await.unwrap();
-    //let ipV4_addr = network::get_ip().expect("Failed to get local IP");
-    //let socket_addr = format!("{}:30000", ipV4_addr);
-    //let udp_socekt_reciver = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
-    //let udp_socket_sender = UdpSocket::bind(socket_addr).expect("Failed to bind socket");
 
     let udp_socket_sender = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket");
     udp_socket_sender.set_broadcast(true).expect("Failed to enable UDP broadcast");
