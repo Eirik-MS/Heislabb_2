@@ -108,7 +108,8 @@ async fn main() -> std::io::Result<()> {
     let network_reciver_handle = tokio::spawn(async move {
         network_reciver(
             &udp_socket_reciver
-        )
+            decision_to_network_tx,
+        ).await;
     });
 
     let network_sender_handle = tokio::spawn(async move {
