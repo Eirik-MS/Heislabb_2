@@ -14,6 +14,8 @@ use std::os::unix::net::SocketAddr;
 use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
 use local_ip_address::local_ip;
+use std::collections::HashSet;
+use chrono::{DateTime, Utc};
 
 
 
@@ -22,6 +24,39 @@ use tokio::time::{interval, Duration};
 
 const NUM_OF_FLOORS:u8 = 4;
 const UPDATE_INTERVAL:Duration = Duration::from_millis(10); //ms
+
+pub struct OrderCost {
+    pub order: Order,
+    pub cost: i32,
+}
+    
+async fn cost_function(hall_orders: HashSet<Order>, local_info: ElevatorState) -> HashSet<OrderCost> {
+    let now = Utc::now();
+    let mut filtered_orders = HashSet::new(); 
+    
+    for order in hall_orders {
+        if order.taken > 0 {
+            continue; 
+        }
+    
+        let mut cost: i32 = 0;
+        let floor_diff: i32 = (order.floor as i32 - local_info.current_floor as i32).abs();
+        cost += floor_diff * 3;
+        if (local_info.current_direction == 0 && order.call == 0 && order.floor >= local_info.current_floor) ||
+            (local_info.current_direction == 1 && order.call == 1 && order.floor <= local_info.current_floor) {
+            cost -= 5;
+        }
+        if order.call == 2 { //low cost
+            cost = 0; //must be takesn
+        }
+        if order.timestamp < now { //low cost
+            cost = 0;
+        }
+        filtered_orders.insert(OrderCost { order, cost });
+    }
+    
+        filtered_orders
+}
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
