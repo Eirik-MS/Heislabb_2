@@ -81,7 +81,7 @@ async fn main() -> std::io::Result<()> {
         let mut interval = interval(UPDATE_INTERVAL);
         loop {
             decision.step().await;
-            std::thread::sleep(UPDATE_INTERVAL);
+            tokio::time::sleep(UPDATE_INTERVAL).await;;
         }
     });
 
@@ -120,8 +120,13 @@ async fn main() -> std::io::Result<()> {
     // Optionally await both handles or run other tasks
     // For example, you can await one of them or use join! macro if they need to run concurrently.
     // Here we simply await the elevator_handle for demonstration.
-    elevator_handle.await?;
-    decision_handle.await?;
+    tokio::join!(
+        elevator_handle,
+        decision_handle,
+        network_reciver_handle,
+        network_sender_handle
+    );
+    
     
     Ok(())
 }

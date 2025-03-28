@@ -82,13 +82,20 @@ impl Decision {
 
         //------------------------------------------------------------------
         // Lock first to ensure the guard lives long enough to be used
-        let mut new_order_rx_guard = self.new_order_rx.lock().await;
-        let mut order_completed_rx_guard = self.order_completed_rx.lock().await;
-        let mut new_elev_state_rx_guard = self.new_elev_state_rx.lock().await;
-
-        let mut network_elev_info_rx_guard = self.network_elev_info_rx.lock().await;
-        let mut network_alivedead_rx_guard = self.network_alivedead_rx.lock().await;
-
+        let (
+            mut new_order_rx_guard,
+            mut order_completed_rx_guard,
+            mut new_elev_state_rx_guard,
+            mut network_elev_info_rx_guard,
+            mut network_alivedead_rx_guard
+        ) = tokio::join!(
+            self.new_order_rx.lock(),
+            self.order_completed_rx.lock(),
+            self.new_elev_state_rx.lock(),
+            self.network_elev_info_rx.lock(),
+            self.network_alivedead_rx.lock()
+        );
+        
         tokio::select! {
             //---------ELEVATOR COMMUNICATION--------------------//
             new_order = new_order_rx_guard.recv() => {
@@ -315,13 +322,16 @@ impl Decision {
         let mut status_changed = false; //flag
 
         {    
-            let dead_elevators = self.dead_elev.lock().await;  // Lock the Mutex
+            let (dead_elevators, mut broadcast_msg) = tokio::join!(
+                self.dead_elev.lock(),
+                self.local_broadcastmessage.write()
+            );
+             // Lock the Mutex
             let alive_elevators: HashSet<String> = dead_elevators.iter()
                 .filter(|(_, &is_alive)| is_alive)
                 .map(|(id, _)| id.clone())
                 .collect();
         
-            let mut broadcast_msg = self.local_broadcastmessage.write().await;
             for (_elev_id, orders) in &mut broadcast_msg.orders {
                 for order in orders.iter_mut() {
                     //println!("Checking order: {:?}", order);
