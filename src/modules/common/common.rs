@@ -2,6 +2,7 @@ use serde::{Serialize, Deserialize};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::collections::HashSet;
+use chrono::{DateTime, Utc};
 
 
 
@@ -25,8 +26,9 @@ pub struct ElevatorState {
 pub struct Order {
     pub call: u8, // 0 - up, 1 - down, 2 - cab
     pub floor: u8, //1,2,3,4
+    pub taken: u8,
+    pub timestamp: DateTime<Utc>,
     pub status: OrderStatus,
-    pub barrier: HashSet<String>, //barrier for requested->confirmed & confirmed->norder
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 network-rust = { git = "https://github.com/TTK4145/network-rust", tag = "v0.3.0" }
 driver-rust = { git = "https://github.com/TTK4145/driver-rust", tag = "v0.1.0" }
+chrono = { version = "0.4", features = ["serde"] }
 
 crossbeam-channel = "0.5"
 tokio = { version = "1", features = ["full"] }

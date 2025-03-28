@@ -49,8 +49,8 @@ async fn main() -> std::io::Result<()> {
 
     // Setup network channels 
     let (decision_to_network_tx, decision_to_network_rx) = mpsc::channel(100);
-    let (network_to_decision_tx, network_to_decision_rx) = mpsc::channel(100);
-    let (network_alive_tx, network_alive_rx) = mpsc::channel(100);
+    //let (network_to_decision_tx, network_to_decision_rx) = mpsc::channel(100);
+    //let (network_alive_tx, network_alive_rx) = mpsc::channel(100);
 
     // Spawn elevator task
     // Spawn a separate thread to run the elevator logic
@@ -76,7 +76,13 @@ async fn main() -> std::io::Result<()> {
             new_orders_from_elevator_rx,
             elevator_assigned_orders_tx,
             orders_confirmed_tx,
+            
         );
+
+        let local_msg = self.local_broadcastmessage.read().await.clone(); 
+        if let Err(e) = self.network_elev_info_tx.lock().await.send(local_msg).await {
+            eprintln!("Failed to send message: {:?}", e);
+        }
         
         let mut interval = interval(UPDATE_INTERVAL);
         loop {
@@ -101,16 +107,13 @@ async fn main() -> std::io::Result<()> {
     // Spawn network tasks
     let network_reciver_handle = tokio::spawn(async move {
         network_reciver(
-            udp_socket_reciver,
-            network_to_decision_tx,
-            network_alive_tx,
-            Duration::from_secs(5),
-        ).await;
+            &udp_socket_reciver
+        )
     });
 
     let network_sender_handle = tokio::spawn(async move {
         network_sender(
-            udp_socket_sender,
+            &udp_socket_sender,
             decision_to_network_rx,
         ).await;
     });

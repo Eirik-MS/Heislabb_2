@@ -147,8 +147,8 @@ impl ElevatorController {
                     let order = Order {
                         call: call_button.call,
                         floor: call_button.floor,
+                        pub timestamp: Chrono::Utc::now(),
                         status: OrderStatus::Requested,
-                        barrier: HashSet::new(),
                     }; 
 
                     let _ = self.new_orders_from_elevator_tx.send(order).await;
