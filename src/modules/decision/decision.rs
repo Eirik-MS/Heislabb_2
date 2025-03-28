@@ -163,17 +163,16 @@ impl Decision {
 
  
         local_msg_copy = self.handle_barrier(local_msg_copy).await;;
+
+        {
+            let mut write_guard = self.local_broadcastmessage.write().await;
+            *write_guard = local_msg_copy;
+        }
         
         //braodcasting message
         let local_msg = self.local_broadcastmessage.read().await.clone(); 
         if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
             eprintln!("Failed to send message: {:?}", e);
-        }
-
-
-        {
-            let mut write_guard = self.local_broadcastmessage.write().await;
-            *write_guard = local_msg_copy;
         }
 
     }
