@@ -80,16 +80,14 @@ impl Decision {
     // however, we still jump to confirmed without barrier (kinda obvious)
     pub async fn step(&mut self) { 
 
-        //------------------------------------------------------------------
-        // Lock first to ensure the guard lives long enough to be used
-
         tokio::select! {
             //---------ELEVATOR COMMUNICATION--------------------//
             new_order = self.new_order_rx.recv() => {
                 match new_order {
                     Some(order) => {
                         println!("New order received: {:?}", order);
-                        self.handle_new_order(order);
+                        self.handle_new_order(order).await;
+                        self.handle_barrier().await;
                         self.hall_order_assigner().await; 
                     }
                     None => {
@@ -115,12 +113,12 @@ impl Decision {
                 match result {
                     Ok(()) => {
                         {
-                            println!("New state received.");
+                           // println!("New state received.");
                             let new_state = self.new_elev_state_rx.borrow().clone();
                             let mut broadcast_message = self.local_broadcastmessage.write().await;
                             broadcast_message.states.insert(self.local_id.clone(), new_state); // we are the only source of truth
                         }
-                        self.hall_order_assigner().await;
+                        //self.hall_order_assigner().await;
                     }
                     Err(_) => {
                         println!("new_elev_state_rx channel closed.");
@@ -129,47 +127,47 @@ impl Decision {
                 }
             },
 
-            //---------NETWORK COMMUNICATION--------------------//
-            recvd_broadcast_message = self.network_elev_info_rx.recv() => {
-                match recvd_broadcast_message {
-                    Some(recvd) => {
-                        self.handle_recv_broadcast(recvd).await;
-                        self.hall_order_assigner().await;
+            // //---------NETWORK COMMUNICATION--------------------//
+            // recvd_broadcast_message = self.network_elev_info_rx.recv() => {
+            //     match recvd_broadcast_message {
+            //         Some(recvd) => {
+            //             self.handle_recv_broadcast(recvd).await;
+            //             self.hall_order_assigner().await;
                         
-                    }
-                    None => {
-                        println!("network_elev_info_rx channel closed.");
-                    }
-                }
-            },
+            //         }
+            //         None => {
+            //             println!("network_elev_info_rx channel closed.");
+            //         }
+            //     }
+            // },
 
-            recvd_deadalive = self.network_alivedead_rx.recv() => {
-                match recvd_deadalive {
-                    Some(deadalive) => {
-                        if self.update_dead_alive_status(deadalive).await {
-                            self.hall_order_assigner().await;
-                        }
-                    }
-                    None => {
-                        println!("network_alivedead_rx channel closed.");
-                    }
-                }
-            },
+            // recvd_deadalive = self.network_alivedead_rx.recv() => {
+            //     match recvd_deadalive {
+            //         Some(deadalive) => {
+            //             if self.update_dead_alive_status(deadalive).await {
+            //                 self.hall_order_assigner().await;
+            //             }
+            //         }
+            //         None => {
+            //             println!("network_alivedead_rx channel closed.");
+            //         }
+            //     }
+            // },
         }
 
  
         self.handle_barrier().await;;
         
-        //braodcasting message
-        let local_msg = self.local_broadcastmessage.read().await.clone(); 
-        if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
-            eprintln!("Failed to send message: {:?}", e);
-        }
+        // //braodcasting message
+        // let local_msg = self.local_broadcastmessage.read().await.clone(); 
+        // if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
+        //     eprintln!("Failed to send message: {:?}", e);
+        // }
 
     }
 
     async fn handle_new_order(&self, order: Order) {
-        println!("New order received: {:?}", order);
+       // println!("New order received: {:?}", order);
 
         let mut broadcast_message = self.local_broadcastmessage.write().await;
 
@@ -179,8 +177,8 @@ impl Decision {
                 broadcast_message.orders.iter().any(|(_, orders)| {
                     orders.iter().any(|existing_order| {
                         existing_order.floor == order.floor && 
-                        existing_order.call == order.call &&
-                        existing_order.status != OrderStatus::Noorder
+                        existing_order.call == order.call 
+                        //existing_order.status != OrderStatus::Noorder
                     })
                 })
             }
@@ -189,8 +187,8 @@ impl Decision {
                 broadcast_message.orders.get(&self.local_id).map_or(false, |orders| {
                     orders.iter().any(|existing_order| {
                         existing_order.floor == order.floor && 
-                        existing_order.call == order.call &&
-                        existing_order.status != OrderStatus::Noorder
+                        existing_order.call == order.call 
+                       // existing_order.status != OrderStatus::Noorder
                     })
                 })
             }
@@ -206,6 +204,39 @@ impl Decision {
 
             orders.push(new_order);
         }
+        else { //order exists, updating it
+            println!("Order already exists, checking if it needs to be updated.");
+
+            match order.call {
+                0 | 1 => { // HALL order
+                    for (_, orders) in broadcast_message.orders.iter_mut() {
+                        for existing_order in orders.iter_mut() {
+                            if existing_order.floor == order.floor &&
+                               existing_order.call == order.call &&
+                               existing_order.status == OrderStatus::Noorder {
+                                println!("Updating status from Noorder to Requested for hall order.");
+                                existing_order.status = OrderStatus::Requested;
+                            }
+                        }
+                    }
+                }
+                2 => { // CAB order
+                    if let Some(orders) = broadcast_message.orders.get_mut(&self.local_id) {
+                        for existing_order in orders.iter_mut() {
+                            if existing_order.floor == order.floor &&
+                               existing_order.call == order.call &&
+                               existing_order.status == OrderStatus::Noorder {
+                                println!("Updating status from Noorder to Requested for cab order.");
+                                existing_order.status = OrderStatus::Requested;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        println!("Current broadcast message: {:?}", *broadcast_message);
+        println!("Finished new order handling function");
     }
 
     async fn handle_order_completed(&self, completed_floor: u8) {
@@ -225,6 +256,7 @@ impl Decision {
                 }
             }
         }
+        println!("Current broadcast message: {:?}", *broadcast_message);
     }
 
     async fn handle_recv_broadcast(&self, recvd: BroadcastMessage) {
@@ -332,6 +364,7 @@ impl Decision {
 
     async fn handle_barrier(&self) -> bool {
        //check that we can move from requested to confirmed, if yes change status, call hall assigner, clean barrier (CAN THIS BE AN ISSUE?)
+       //println!("Startin barrier checking");
        let mut status_changed = false; //flag
 
        {    
@@ -347,15 +380,17 @@ impl Decision {
                    //println!("Checking order: {:?}", order);
                    if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
                        order.status = OrderStatus::Confirmed;
-                       order.barrier.clear();
+                       order.barrier.clear(); //TODO attach thi elev ID
                        status_changed = true;
-                       self.orders_recived_confirmed_tx.send(order.clone()).await.unwrap();
+                       self.orders_recived_confirmed_tx.send(order.clone()).await;
+
                    }
                    if order.status == OrderStatus::Requested && order.call == 2 && order.barrier.is_empty() {
                        println!("CAB order without barrier, setting to confirmed.");
                        order.status = OrderStatus::Confirmed;
                        status_changed = true;
-                       self.orders_recived_confirmed_tx.send(order.clone()).await.unwrap();
+                       self.orders_recived_confirmed_tx.send(order.clone()).await;
+                       
                    }
                }
 
@@ -383,24 +418,13 @@ impl Decision {
        status_changed
     }
 
-    pub async fn hall_order_assigner(& self) { //check if mut is needed here
-        //1. map broadcast Message to Elevator system struct
-        //take even dead elevators? and then reassign orders
-        //status assigned stays but elevators take possibly diff orders
-        //println!("Hall order assigner called.");
+    pub async fn hall_order_assigner(& self) { 
+        // Take current HALL orders and reassign them based on cost function
+        // 
+        println!("Started Hall order assigning.");
         let mut broadcast = self.local_broadcastmessage.write().await;
-        println!("Broadcast message: {:?}", *broadcast);
-        let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
-        let mut states = std::collections::HashMap::new();
-        //println!("Temp created.");
-        //1.1 map hall orders
-        for orders in broadcast.orders.values() {
-            for order in orders {
-                if order.status == OrderStatus::Confirmed && order.call < 2 {
-                    hall_requests[(order.floor) as usize][order.call as usize] = true;
-                }
-            }
-        }
+      //  println!("Current broadcast message: {:?}", *broadcast);
+
 
         /*
             if state.direction != stop 
@@ -409,123 +433,14 @@ impl Decision {
                 state dorropen
             else idle
         */
-        //println!("Check other elevators");
-        for (id, state) in &broadcast.states {
-            //println!("Checking elevator: {}", id);
-            let dead_elevators = self.dead_elev.lock().await;  
-            if let Some(true) = dead_elevators.get(id) {
-                println!("Elevator {} is dead, skipping.", id);
-                continue;
-            }
-            println!("Elevator {} is alive.", id);
-            let cab_requests: Vec<bool> = (1..=MAX_FLOORS) 
-            .map(|floor| {
-                broadcast.orders.values().any(|orders| {
-                    orders.iter().any(|order| {
-                        order.floor as usize == floor && order.call == 2 && order.status == OrderStatus::Confirmed
-                    })
-                })
-            })
-            .collect();
-            //println!("Cab requests: {:?}", cab_requests);
-        
-            let behaviour = if state.door_open {
-                "doorOpen"
-            } else if state.current_direction != e::DIRN_STOP { 
-                "moving"
-            } else {
-                "idle"
-            };
-        
-            states.insert(id.clone(), serde_json::json!({
-                "behaviour": behaviour,
-                "floor": state.current_floor,
-                "direction": match state.current_direction {
-                    e::DIRN_DOWN => "down",
-                    e::DIRN_UP => "up",
-                    _ => "stop",
-                },
-                "cabRequests": cab_requests
-            }));
-        }
 
-        //1.3 create merged json
-        let input_json = serde_json::json!({
-            "hallRequests": hall_requests,
-            "states": states
-        }).to_string();
-        
-        println!("{}", serde_json::to_string_pretty(&input_json).unwrap());
 
-        //2. use hall order assigner
-        let hra_output = Command::new("./hall_request_assigner")
-        .arg("--input")
-        .arg(&input_json)
-        .output()
-        .expect("Failed to execute hall_request_assigner");
-
-        let hra_output_str : String;
-        let mut new_orders: HashMap<String, Vec<Order>> = HashMap::new();
-
-        if hra_output.status.success() {
-            let hra_output_str = String::from_utf8(hra_output.stdout)
-                .expect("Invalid UTF-8 hra_output");
-            
-            let hra_output: HashMap<String, Vec<Vec<bool>>> = serde_json::from_str(&hra_output_str)
-                .expect("Failed to deserialize hra_output");
-        
-            for (elev_id, floors) in &hra_output {
-                println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
-            }
-
-            // 3. update local broadcast message according to the return value of executable - hra_output
-            for (new_elevator_id, orders) in hra_output.iter() {
-                for (floor_index, buttons) in orders.iter().enumerate() {
-                    let floor = (floor_index) as u8; 
-                    for (call_type, &is_confirmed) in buttons.iter().enumerate() { //call type can only be either 0 or 1 (up, down)
-                        if is_confirmed { //true e. i. there is an order
-                            let call = call_type as u8; 
-    
-                            let mut found_order: Option<Order> = None;
-                            let mut previous_elevator_id: Option<String> = None;
-    
-                            for (elevator_id, orders) in broadcast.orders.iter_mut() {
-                                if let Some(order) = orders.iter_mut().find(|order| order.floor == floor && order.call == call) {
-                                    found_order = Some(order.clone());
-                                    previous_elevator_id = Some(elevator_id.clone());
-                                    break;
-                                }
-                            }
-            
-                            if let Some(order) = found_order {
-                                if let Some(prev_id) = previous_elevator_id {
-                                    if let Some(prev_orders) = broadcast.orders.get_mut(&prev_id) {
-                                        if let Some(pos) = prev_orders.iter().position(|x| x == &order) {
-                                            prev_orders.remove(pos);
-                                        }
-                                    }
-                                }
-            
-                                new_orders.entry(new_elevator_id.clone())
-                                    .or_default()
-                                    .push(order);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        for (elevator_id, orders) in new_orders {
-            for order in orders {
-                broadcast.orders.entry(elevator_id.clone()).or_default().push(order);
-            }
-        }
-
-        //4. send order one by one to FSM
+        // send order one by one to ELEVator
+        // TODO: make and move to indep function send_back_orders()
         for (_elevator_id, orders) in &broadcast.orders {
             for order in orders.iter() {
                 if order.status == OrderStatus::Confirmed {
+                    println!("Sending confirmed order from elevator {}: floor {}, call {:?}",_elevator_id, order.floor, order.call);
                     if let Err(e) = self.elevator_assigned_orders_tx.send(order.clone()).await {
                         eprintln!("Failed to send confirmed order: {}", e);
                     }
