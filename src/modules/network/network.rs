@@ -100,6 +100,7 @@ pub async fn network_reciver(
                     alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
                 }
                 //Send BroadcastMessage to decision
+                println!("Sending message to the decisoin");
                 network_to_decision_tx.send(message.clone()).await;
 
                 // Collect the ids that have expired

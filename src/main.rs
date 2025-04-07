@@ -80,6 +80,7 @@ async fn main() -> std::io::Result<()> {
         
         let mut interval = interval(UPDATE_INTERVAL);
         loop {
+            println!("From main looping decision");
             decision.step().await;
             std::thread::sleep(UPDATE_INTERVAL);
         }

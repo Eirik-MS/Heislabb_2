@@ -79,7 +79,7 @@ impl Decision {
     // ALIVE elevators have attached ID in order's barrier, then we move
     // however, we still jump to confirmed without barrier (kinda obvious)
     pub async fn step(&mut self) { 
-
+        println!("Entered Step");
         tokio::select! {
             //---------ELEVATOR COMMUNICATION--------------------//
             new_order = self.new_order_rx.recv() => {
@@ -127,32 +127,35 @@ impl Decision {
                 }
             },
 
-            // //---------NETWORK COMMUNICATION--------------------//
-            // recvd_broadcast_message = self.network_elev_info_rx.recv() => {
-            //     match recvd_broadcast_message {
-            //         Some(recvd) => {
-            //             self.handle_recv_broadcast(recvd).await;
-            //             self.hall_order_assigner().await;
+            //---------NETWORK COMMUNICATION--------------------//
+            recvd_broadcast_message = self.network_elev_info_rx.recv() => {
+                println!("Waiting for broadcast message");
+                match recvd_broadcast_message {
+                    Some(recvd) => {
+                        println!("Received broadcast message in Decision: {:?}", recvd);
+                        // self.handle_recv_broadcast(recvd).await;
+                        // self.hall_order_assigner().await;
                         
-            //         }
-            //         None => {
-            //             println!("network_elev_info_rx channel closed.");
-            //         }
-            //     }
-            // },
+                    }
+                    None => {
+                        println!("network_elev_info_rx channel closed.");
+                    }
+                }
+            },
 
-            // recvd_deadalive = self.network_alivedead_rx.recv() => {
-            //     match recvd_deadalive {
-            //         Some(deadalive) => {
-            //             if self.update_dead_alive_status(deadalive).await {
-            //                 self.hall_order_assigner().await;
-            //             }
-            //         }
-            //         None => {
-            //             println!("network_alivedead_rx channel closed.");
-            //         }
-            //     }
-            // },
+            recvd_deadalive = self.network_alivedead_rx.recv() => {
+                match recvd_deadalive {
+                    Some(deadalive) => {
+                        println!("deadalive status of ELEVators: {:?}", deadalive);
+                        if self.update_dead_alive_status(deadalive).await {
+                            self.hall_order_assigner().await;
+                        }
+                    }
+                    None => {
+                        println!("network_alivedead_rx channel closed.");
+                    }
+                }
+            },
         }
 
  
@@ -162,7 +165,18 @@ impl Decision {
         // let local_msg = self.local_broadcastmessage.read().await.clone(); 
         // if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
         //     eprintln!("Failed to send message: {:?}", e);
-        // }
+        // } 
+        let msg = {
+            let guard = self.local_broadcastmessage.read().await;
+            guard.clone()
+        };
+        
+        let tx = self.network_elev_info_tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = tx.send(msg).await {
+                eprintln!("Send failed: {:?}", e);
+            }
+        });
 
     }
 
@@ -380,7 +394,7 @@ impl Decision {
                    //println!("Checking order: {:?}", order);
                    if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
                        order.status = OrderStatus::Confirmed;
-                       order.barrier.clear(); //TODO attach thi elev ID
+                       order.barrier.clear(); //TODO attach thi elev ID????
                        status_changed = true;
                        self.orders_recived_confirmed_tx.send(order.clone()).await;
 
@@ -423,8 +437,8 @@ impl Decision {
         // 
         println!("Started Hall order assigning.");
         let mut broadcast = self.local_broadcastmessage.write().await;
-      //  println!("Current broadcast message: {:?}", *broadcast);
-
+        let all_states = &broadcast.states;
+        let mut new_orders: HashMap<String, Vec<Order>> = HashMap::new();
 
         /*
             if state.direction != stop 
@@ -434,6 +448,58 @@ impl Decision {
             else idle
         */
 
+
+        // 1. filter dead elevators
+        let dead_elev = self.dead_elev.lock().await;
+        let alive_elevators: Vec<_> = all_states
+            .keys()
+            .filter(|id| !dead_elev.get(*id).copied().unwrap_or(false))
+            .collect();
+
+        if alive_elevators.is_empty() {
+            println!("No alive elevators found. Skipping reassignment.");
+            return;
+        }
+
+        // 2. collecting all hall orders 
+        let mut hall_orders: Vec<Order> = vec![];
+        for (_id, orders) in &broadcast.orders {
+            for order in orders {
+                if order.call == 0 || order.call == 1 {
+                    hall_orders.push(order.clone());
+                }
+            }
+        }
+
+        // 3. assign orders based on cost
+        for order in hall_orders {
+            let mut best_cost = u32::MAX;
+            let mut best_elev: Option<&String> = None;
+
+            for elev_id in &alive_elevators {
+                if let Some(state) = all_states.get(*elev_id) {
+                    let cost = Self::cost_fn(state, &order); 
+                    if cost < best_cost {
+                        best_cost = cost;
+                        best_elev = Some(elev_id);
+                    }
+                }
+            }
+
+            if let Some(best_id) = best_elev {
+                new_orders.entry(best_id.clone()).or_default().push(order);
+            }
+        }
+
+        for (elev_id, orders) in &broadcast.orders {
+            for order in orders {
+                if order.call == 2 {
+                    new_orders.entry(elev_id.clone()).or_default().push(order.clone());
+                }
+            }
+        }
+
+        broadcast.orders = new_orders;
 
         // send order one by one to ELEVator
         // TODO: make and move to indep function send_back_orders()
@@ -450,5 +516,14 @@ impl Decision {
 
         println!("Hall order assigner finished.");
 
+    }
+
+    fn cost_fn(state: &ElevatorState, order: &Order) -> u32 {
+        let floor_diff = (state.current_floor as i32 - order.floor as i32).abs() as u32;
+        let direction_match = (order.call == 0 && state.current_direction == 0)
+            || (order.call == 1 && state.current_direction == 1);
+        let direction_penalty = if direction_match { 0 } else { 5 };
+    
+        floor_diff + direction_penalty
     }
 }
