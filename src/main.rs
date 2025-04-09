@@ -7,13 +7,14 @@ use modules::decision::*;
 use modules::network::*;
 use serde::de;
 use tokio::sync::watch;
-use std::net::UdpSocket;
+//use std::net::UdpSocket;
 
 use std::collections::HashMap;
 use std::os::unix::net::SocketAddr;
 use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
 use local_ip_address::local_ip;
+use tokio::net::UdpSocket;
 
 
 
@@ -80,9 +81,10 @@ async fn main() -> std::io::Result<()> {
         
         let mut interval = interval(UPDATE_INTERVAL);
         loop {
-            println!("From main looping decision");
+          //  println!("From main looping decision");
             decision.step().await;
-            std::thread::sleep(UPDATE_INTERVAL);
+            tokio::time::sleep(UPDATE_INTERVAL).await;
+
         }
     });
 
@@ -93,9 +95,11 @@ async fn main() -> std::io::Result<()> {
     //let udp_socekt_reciver = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
     //let udp_socket_sender = UdpSocket::bind(socket_addr).expect("Failed to bind socket");
 
-    let udp_socket_sender = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket");
+    //let udp_socket_sender = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket");
+    let udp_socket_sender = UdpSocket::bind("0.0.0.0:0").await?;
     udp_socket_sender.set_broadcast(true).expect("Failed to enable UDP broadcast");
-    let udp_socket_reciver  = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind receiving socket");
+    //let udp_socket_reciver  = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind receiving socket");
+    let udp_socket_reciver = UdpSocket::bind("0.0.0.0:30000").await?;
     udp_socket_reciver.set_broadcast(true).expect("Failed to enable UDP broadcast");
 
 

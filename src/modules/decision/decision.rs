@@ -86,9 +86,9 @@ impl Decision {
                 match new_order {
                     Some(order) => {
                         println!("New order received: {:?}", order);
-                        self.handle_new_order(order).await;
-                        self.handle_barrier().await;
-                        self.hall_order_assigner().await; 
+                       self.handle_new_order(order).await;
+                       self.handle_barrier().await;
+                       self.hall_order_assigner().await; 
                     }
                     None => {
                         println!("new_order_rx channel closed.");
@@ -99,8 +99,8 @@ impl Decision {
             order_completed = self.order_completed_rx.recv() => {
                 match order_completed {
                     Some(completed_floor) => {
-                        self.handle_order_completed(completed_floor).await;
-                        self.hall_order_assigner().await;
+                       self.handle_order_completed(completed_floor).await;
+                       self.hall_order_assigner().await;
                     }
                     None => {
                         println!("order_completed_rx channel closed.");
@@ -113,12 +113,12 @@ impl Decision {
                 match result {
                     Ok(()) => {
                         {
-                           // println!("New state received.");
-                            let new_state = self.new_elev_state_rx.borrow().clone();
-                            let mut broadcast_message = self.local_broadcastmessage.write().await;
-                            broadcast_message.states.insert(self.local_id.clone(), new_state); // we are the only source of truth
+                           //println!("New state received.");
+                           let new_state = self.new_elev_state_rx.borrow().clone();
+                           let mut broadcast_message = self.local_broadcastmessage.write().await;
+                           broadcast_message.states.insert(self.local_id.clone(), new_state); // we are the only source of truth
                         }
-                        //self.hall_order_assigner().await;
+                        self.hall_order_assigner().await;
                     }
                     Err(_) => {
                         println!("new_elev_state_rx channel closed.");
@@ -129,12 +129,12 @@ impl Decision {
 
             //---------NETWORK COMMUNICATION--------------------//
             recvd_broadcast_message = self.network_elev_info_rx.recv() => {
-                println!("Waiting for broadcast message");
+               // println!("Waiting for broadcast message");
                 match recvd_broadcast_message {
                     Some(recvd) => {
-                        println!("Received broadcast message in Decision: {:?}", recvd);
-                        // self.handle_recv_broadcast(recvd).await;
-                        // self.hall_order_assigner().await;
+                        //println!("Received broadcast message in Decision: {:?}", recvd);
+                        self.handle_recv_broadcast(recvd).await;
+                       // self.hall_order_assigner().await;
                         
                     }
                     None => {
@@ -148,7 +148,7 @@ impl Decision {
                     Some(deadalive) => {
                         println!("deadalive status of ELEVators: {:?}", deadalive);
                         if self.update_dead_alive_status(deadalive).await {
-                            self.hall_order_assigner().await;
+                           // self.hall_order_assigner().await;
                         }
                     }
                     None => {
@@ -156,32 +156,24 @@ impl Decision {
                     }
                 }
             },
+
         }
+        
 
  
-        self.handle_barrier().await;;
+       self.handle_barrier().await;;
         
         // //braodcasting message
-        // let local_msg = self.local_broadcastmessage.read().await.clone(); 
-        // if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
-        //     eprintln!("Failed to send message: {:?}", e);
-        // } 
-        let msg = {
-            let guard = self.local_broadcastmessage.read().await;
-            guard.clone()
-        };
-        
-        let tx = self.network_elev_info_tx.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tx.send(msg).await {
-                eprintln!("Send failed: {:?}", e);
-            }
-        });
+        let local_msg = self.local_broadcastmessage.read().await.clone(); 
+        if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
+            eprintln!("Failed to send message: {:?}", e);
+        } 
+
 
     }
 
     async fn handle_new_order(&self, order: Order) {
-       // println!("New order received: {:?}", order);
+        println!("New order received: {:?}", order);
 
         let mut broadcast_message = self.local_broadcastmessage.write().await;
 
@@ -306,12 +298,12 @@ impl Decision {
 
             for (elev_id, received_orders) in &recvd.orders {
                 for received_order in received_orders {
-                    if received_order.call == 0 || received_order.call == 1 {
+                    if received_order.call == 0 || received_order.call == 1 { //hall order
                         let mut found = false;
 
                         for (_, local_orders) in local_msg.orders.iter_mut() {
                             for local_order in local_orders.iter_mut() {
-                                if local_order.floor == received_order.floor
+                                if local_order.floor == received_order.floor //fin unique hall order
                                     && local_order.call == received_order.call
                                 {
                                     found = true;
@@ -326,6 +318,7 @@ impl Decision {
                                             }
                                         }
                                         OrderStatus::Requested | OrderStatus::Completed => {
+                                            //do nothing, handled by barrier
                                         }
                                         OrderStatus::Confirmed => {
                                             if received_order.status == OrderStatus::Completed {
@@ -342,57 +335,73 @@ impl Decision {
                                 .or_insert_with(Vec::new)
                                 .push(received_order.clone());
                         }
+
                     }
                 }
             }
+            println!("received message: {:?}", recvd);
 
             for (id, state) in recvd.states { //merging
                 local_msg.states.insert(id, state);
             }
+            println!("local message: {:?}", local_msg);
         }
     }
 
-    async fn update_dead_alive_status(&self, deadalive: AliveDeadInfo) -> bool {
+    pub async fn update_dead_alive_status(&self, deadalive: AliveDeadInfo) -> bool {
+        println!("entering dead alive handler");
+
         let mut modified = false;
         let mut dead_elev_guard = self.dead_elev.lock().await;
-    
+
+        if !dead_elev_guard.contains_key(&self.local_id) {
+            dead_elev_guard.insert(self.local_id.clone(), false); // Local id starts as dead (true)
+            modified = true;
+        }
+
         for (id, status) in deadalive.elevators {
             let entry = dead_elev_guard.entry(id.clone());
-    
+
             match entry {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
-                    if *o.get() != status.is_alive {
-                        o.insert(status.is_alive);
+                    let new_status = !status.is_alive; // Invert the status: alive (false) -> dead (true)
+                    if *o.get() != new_status {
+                        o.insert(new_status);
                         modified = true;
                     }
                 }
                 std::collections::hash_map::Entry::Vacant(v) => {
-                    v.insert(status.is_alive);
+                    let new_status = !status.is_alive;
+                    v.insert(new_status);
                     modified = true;
                 }
             }
         }
-    
+        //println!("dead elev in its handler {:?}", dead_elev_guard);
         modified
     }
 
     async fn handle_barrier(&self) -> bool {
        //check that we can move from requested to confirmed, if yes change status, call hall assigner, clean barrier (CAN THIS BE AN ISSUE?)
-       //println!("Startin barrier checking");
+       println!("Startin barrier checking");
        let mut status_changed = false; //flag
 
        {    
            let dead_elevators = self.dead_elev.lock().await;  // Lock the Mutex
            let alive_elevators: HashSet<String> = dead_elevators.iter()
-               .filter(|(_, &is_alive)| is_alive)
+               .filter(|(_, &is_alive)| !is_alive)
                .map(|(id, _)| id.clone())
                .collect();
-       
+
+               println!("alive elevs: {:?}", alive_elevators);
+               println!("dead elevs: {:?}", dead_elevators);
            let mut broadcast_msg = self.local_broadcastmessage.write().await;
+           println!("message: {:?}", broadcast_msg);
            for (_elev_id, orders) in &mut broadcast_msg.orders {
                for order in orders.iter_mut() {
-                   //println!("Checking order: {:?}", order);
-                   if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
+                   println!("Checking order: {:?}", order);
+                   if order.status == OrderStatus::Requested && order.barrier.is_subset(&alive_elevators) {
+                       println!("changing status");
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); //TODO attach thi elev ID????
                        status_changed = true;
@@ -412,17 +421,19 @@ impl Decision {
        }
 
        {
+
+        
            let mut broadcast_msg = self.local_broadcastmessage.write().await;
            let dead_elevators = self.dead_elev.lock().await;  // Lock the Mutex
            let alive_elevators: HashSet<String> = dead_elevators.iter()
-               .filter(|(_, &is_alive)| is_alive)
+               .filter(|(_, &is_alive)| !is_alive)
                .map(|(id, _)| id.clone())
                .collect();
        
            //check if we can move from finished to NoOrder, clean barrier
            for (_elev_id, orders) in &mut broadcast_msg.orders {
                for order in orders.iter_mut() {
-                   if order.status == OrderStatus::Completed && alive_elevators.is_subset(&order.barrier) {
+                   if order.status == OrderStatus::Completed && order.barrier.is_subset(&alive_elevators) {
                        order.status = OrderStatus::Noorder;
                        order.barrier.clear();
                    }
@@ -450,7 +461,11 @@ impl Decision {
 
 
         // 1. filter dead elevators
-        let dead_elev = self.dead_elev.lock().await;
+        
+        let mut dead_elev = self.dead_elev.lock().await;
+        if !dead_elev.contains_key(&self.local_id) {
+            dead_elev.insert(self.local_id.clone(), false); // Local id starts as alive (true)
+        }
         let alive_elevators: Vec<_> = all_states
             .keys()
             .filter(|id| !dead_elev.get(*id).copied().unwrap_or(false))
@@ -460,6 +475,7 @@ impl Decision {
             println!("No alive elevators found. Skipping reassignment.");
             return;
         }
+
 
         // 2. collecting all hall orders 
         let mut hall_orders: Vec<Order> = vec![];
@@ -514,7 +530,7 @@ impl Decision {
             }
         }
 
-        println!("Hall order assigner finished.");
+      //  println!("Hall order assigner finished.");
 
     }
 
