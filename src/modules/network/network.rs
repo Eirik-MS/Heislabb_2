@@ -94,7 +94,7 @@ pub async fn network_reciver(
 
     loop {
         // Make sure to await UDPlistener since it is async
-        println!("loop");
+        //println!("loop");
 
         // Collect the ids that have expired
         let now = Instant::now();
@@ -113,7 +113,7 @@ pub async fn network_reciver(
             alive_dead_info.update_elevator_status(id.clone(), false);
             alive_dead_info.last_heartbeat.remove(&id);
         }
-        println!("Sending dead alive to decision: {:?}", alive_dead_info);
+        //println!("Sending dead alive to decision: {:?}", alive_dead_info);
         if let Err(e) = network_alive_tx.send(alive_dead_info.clone()).await {
             eprintln!("Failed to send alive info: {}", e);
         }

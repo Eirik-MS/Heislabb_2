@@ -99,7 +99,7 @@ impl Decision {
                 match order_completed {
                     Some(completed_floor) => {
                        self.handle_order_completed(completed_floor).await;
-                       self.hall_order_assigner().await;
+                      // self.hall_order_assigner().await; //status changes but not reassigned until needed
                     }
                     None => {
                         println!("order_completed_rx channel closed.");
@@ -117,7 +117,7 @@ impl Decision {
                            let mut broadcast_message = self.local_broadcastmessage.write().await;
                            broadcast_message.states.insert(self.local_id.clone(), new_state); // we are the only source of truth
                         }
-                        self.hall_order_assigner().await;
+                        //self.hall_order_assigner().await;
                     }
                     Err(_) => {
                         println!("new_elev_state_rx channel closed.");
@@ -127,13 +127,14 @@ impl Decision {
             },
  
             //---------NETWORK COMMUNICATION--------------------//
+            /* 
             recvd_broadcast_message = self.network_elev_info_rx.recv() => {
                // println!("Waiting for broadcast message");
                 match recvd_broadcast_message {
                     Some(recvd) => {
                         //println!("Received broadcast message in Decision: {:?}", recvd);
                         self.handle_recv_broadcast(recvd).await;
-                       // self.hall_order_assigner().await;
+                        self.hall_order_assigner().await;
                         
                     }
                     None => {
@@ -145,7 +146,7 @@ impl Decision {
             recvd_deadalive = self.network_alivedead_rx.recv() => {
                 match recvd_deadalive {
                     Some(deadalive) => {
-                        println!("deadalive status of ELEVators: {:?}", deadalive);
+                        //println!("deadalive status of ELEVators: {:?}", deadalive);
                         if self.update_dead_alive_status(deadalive).await {
                            // self.hall_order_assigner().await;
                         }
@@ -155,19 +156,18 @@ impl Decision {
                     }
                 }
             },
- 
+  */
         }
         
  
- 
-       self.handle_barrier().await;;
+       self.handle_barrier().await;
         
         // //braodcasting message
         let local_msg = self.local_broadcastmessage.read().await.clone();
         if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
             eprintln!("Failed to send message: {:?}", e);
         }
- 
+      //  println!("local_broadcastmessage is {:?}\n", self.local_broadcastmessage);
  
     }
  
@@ -390,7 +390,7 @@ impl Decision {
  
     async fn handle_barrier(&self) -> bool {
        //check that we can move from requested to confirmed, if yes change status, call hall assigner, clean barrier (CAN THIS BE AN ISSUE?)
-       println!("Startin barrier checking");
+       //println!("Startin barrier checking");
        let mut status_changed = false; //flag
  
        {    
@@ -400,8 +400,8 @@ impl Decision {
                .map(|(id, _)| id.clone())
                .collect();
  
-              println!("alive elevs: {:?}", alive_elevators);
-              println!("dead elevs: {:?}", dead_elevators);
+              //println!("alive elevs: {:?}", alive_elevators);
+              //println!("dead elevs: {:?}", dead_elevators);
            let mut broadcast_msg = self.local_broadcastmessage.write().await;
            //println!("message: {:?}", broadcast_msg);
            for (_elev_id, orders) in &mut broadcast_msg.orders {
@@ -489,7 +489,7 @@ impl Decision {
         let mut hall_orders: Vec<Order> = vec![];
         for (_id, orders) in &broadcast.orders {
             for order in orders {
-                if (order.call == 0 || order.call == 1) && order.status == OrderStatus::Confirmed {
+                if (order.call == 0 || order.call == 1){
                     hall_orders.push(order.clone());
                 }
             }
@@ -514,7 +514,7 @@ impl Decision {
                 new_orders.entry(best_id.clone()).or_default().push(order);
             }
         }
- 
+        //add existing cab orders
         for (elev_id, orders) in &broadcast.orders {
             for order in orders {
                 if order.call == 2 {
@@ -541,6 +541,7 @@ impl Decision {
         }
  
       //  println!("Hall order assigner finished.");
+      println!("message: {:?}", broadcast);
  
     }
  
