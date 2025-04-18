@@ -382,7 +382,7 @@ impl Decision {
                 }
             }
         }
-        //println!("dead elev in its handler {:?}", dead_elev_guard);
+        println!("dead elev in its handler {:?}", dead_elev_guard);
         modified
     }
  
@@ -398,10 +398,10 @@ impl Decision {
                .map(|(id, _)| id.clone())
                .collect();
  
-              //println!("alive elevs: {:?}", alive_elevators);
-              //println!("dead elevs: {:?}", dead_elevators);
+              println!("alive elevs: {:?}", alive_elevators);
+              println!("dead elevs: {:?}", dead_elevators);
            let mut broadcast_msg = self.local_broadcastmessage.write().await;
-           //println!("message: {:?}", broadcast_msg);
+           println!("message: {:?}", broadcast_msg);
            for (_elev_id, orders) in &mut broadcast_msg.orders {
                for order in orders.iter_mut() {
                    //println!("Checking order: {:?}", order);
