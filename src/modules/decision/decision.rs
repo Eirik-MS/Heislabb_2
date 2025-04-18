@@ -86,8 +86,8 @@ impl Decision {
                     Some(order) => {
                         println!("New order received: {:?}", order);
                        self.handle_new_order(order).await;
-                       self.handle_barrier().await;
                        self.hall_order_assigner().await;
+                       self.handle_barrier().await;
                     }
                     None => {
                         println!("new_order_rx channel closed.");
@@ -127,7 +127,6 @@ impl Decision {
             },
  
             //---------NETWORK COMMUNICATION--------------------//
-            /* 
             recvd_broadcast_message = self.network_elev_info_rx.recv() => {
                // println!("Waiting for broadcast message");
                 match recvd_broadcast_message {
@@ -156,7 +155,6 @@ impl Decision {
                     }
                 }
             },
-  */
         }
         
  
@@ -413,6 +411,7 @@ impl Decision {
                        order.barrier.clear(); //TODO attach thi elev ID???? NO!
                        status_changed = true;
                        self.orders_recived_confirmed_tx.send(order.clone()).await;
+                       self.elevator_assigned_orders_tx.send(order.clone()).await;
  
                    }
                    if order.status == OrderStatus::Requested && order.call == 2 && order.barrier.is_empty() {
@@ -421,7 +420,7 @@ impl Decision {
                        order.barrier.clear(); // anyway
                        status_changed = true;
                        self.orders_recived_confirmed_tx.send(order.clone()).await;
-                       
+                       self.elevator_assigned_orders_tx.send(order.clone()).await;
                    }
                }
  
@@ -523,23 +522,45 @@ impl Decision {
             }
         }
  
-        broadcast.orders = new_orders;
+
  
         // send order one by one to ELEVator
         // TODO: make and move to indep function send_back_orders()
-        for (_elevator_id, orders) in &broadcast.orders {
-            for order in orders.iter() {
-                if order.status == OrderStatus::Confirmed {
-                    if *_elevator_id == self.local_id.clone() { //only send orders that were assigned to this elevator
-                        println!("Sending confirmed order from elevator {}: floor {}, call {:?}",_elevator_id, order.floor, order.call);
-                        if let Err(e) = self.elevator_assigned_orders_tx.send(order.clone()).await {
-                            eprintln!("Failed to send confirmed order: {}", e);
-                        }
+        
+        for (elevator_id, new_orders_list) in &new_orders {
+            // Only process orders for the local elevator
+            if *elevator_id != self.local_id {
+                continue;
+            }
+        
+            let old_orders_list = broadcast.orders.get(elevator_id);
+        
+            for new_order in new_orders_list {
+                // Only consider confirmed orders
+                if new_order.status != OrderStatus::Confirmed {
+                    continue;
+                }
+        
+                // Check if this confirmed order is *new* (not in the original broadcast)
+                let is_new = match old_orders_list {
+                    Some(old_orders) => !old_orders.contains(new_order),
+                    None => true,
+                };
+        
+                if is_new {
+                    println!(
+                        "Sending new confirmed order from elevator {}: floor {}, call {:?}",
+                        elevator_id, new_order.floor, new_order.call
+                    );
+                    if let Err(e) = self.elevator_assigned_orders_tx.send(new_order.clone()).await {
+                        eprintln!("Failed to send confirmed order: {}", e);
                     }
                 }
             }
         }
- 
+
+
+        broadcast.orders = new_orders;
       //  println!("Hall order assigner finished.");
       println!("message: {:?}", broadcast);
  
