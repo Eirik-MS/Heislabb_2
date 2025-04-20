@@ -322,6 +322,9 @@ impl Decision {
                                                 local_order.status = OrderStatus::Confirmed;
                                                 local_order.barrier.clear(); //for clean finish
                                             } 
+                                            else {
+                                                local_order.barrier.clear(); 
+                                            }
                                             // else if received_order.status == OrderStatus::Completed { //trust others and ack
                                             //     local_order.status = OrderStatus::Completed;
                                             //     local_order.barrier.insert(self.local_id.clone());
@@ -333,6 +336,9 @@ impl Decision {
                                                 println!("REQUESTED removing barrier {:?}", self.local_id.clone());
                                                 local_order.status = OrderStatus::Confirmed; // TRUST
                                                 local_order.barrier.clear(); 
+                                            }
+                                            else {
+                                                local_order.barrier.insert(self.local_id.clone());
                                             }
                                         }
                                         OrderStatus::Confirmed => {
