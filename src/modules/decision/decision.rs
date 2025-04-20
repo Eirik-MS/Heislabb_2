@@ -321,6 +321,7 @@ impl Decision {
                                             } else if received_order.status == OrderStatus::Confirmed {
                                                 local_order.status = OrderStatus::Confirmed;
                                                 local_order.barrier.clear(); //for clean finish
+                                                self.hall_order_assigner().await;
                                             } 
                                             else {
                                                 local_order.barrier.clear(); 
@@ -336,8 +337,10 @@ impl Decision {
                                                 println!("REQUESTED removing barrier {:?}", self.local_id.clone());
                                                 local_order.status = OrderStatus::Confirmed; // TRUST
                                                 local_order.barrier.clear(); 
+                                                self.hall_order_assigner().await;
                                             }
                                             else {
+                                                println!("REQUESTED adding barrier {:?}", self.local_id.clone());
                                                 local_order.barrier.insert(self.local_id.clone());
                                             }
                                         }
@@ -547,9 +550,7 @@ impl Decision {
  
 
  
-        // send order one by one to ELEVator
-        // TODO: make and move to indep function send_back_orders()
-        
+        // send order one by one to ELEVator        
         for (elevator_id, new_orders_list) in &new_orders {
             // Only process orders for the local elevator
             if *elevator_id != self.local_id {
