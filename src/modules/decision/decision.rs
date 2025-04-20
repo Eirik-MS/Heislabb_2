@@ -321,11 +321,12 @@ impl Decision {
                                             } else if received_order.status == OrderStatus::Confirmed {
                                                 local_order.status = OrderStatus::Confirmed;
                                                 local_order.barrier.clear(); //for clean finish
-                                            } else if received_order.status == OrderStatus::Completed { //trust others and ack
-                                                local_order.status = OrderStatus::Completed;
-                                                local_order.barrier.insert(self.local_id.clone());
-                                                self.handle_barrier().await;
-                                            }
+                                            } 
+                                            // else if received_order.status == OrderStatus::Completed { //trust others and ack
+                                            //     local_order.status = OrderStatus::Completed;
+                                            //     local_order.barrier.insert(self.local_id.clone());
+                                            //     self.handle_barrier().await;
+                                            // }
                                         }
                                         OrderStatus::Requested => {
                                             if received_order.status == OrderStatus::Confirmed {
