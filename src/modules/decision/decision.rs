@@ -321,7 +321,7 @@ impl Decision {
                                             } else if received_order.status == OrderStatus::Confirmed {
                                                 local_order.status = OrderStatus::Confirmed;
                                                 local_order.barrier.clear(); //for clean finish
-                                                self.hall_order_assigner().await;
+                                                //self.hall_order_assigner().await;
                                             } 
                                             else {
                                                 local_order.barrier.clear(); 
@@ -337,7 +337,7 @@ impl Decision {
                                                 println!("REQUESTED removing barrier {:?}", self.local_id.clone());
                                                 local_order.status = OrderStatus::Confirmed; // TRUST
                                                 local_order.barrier.clear(); 
-                                                self.hall_order_assigner().await;
+                                               // self.hall_order_assigner().await;
                                             }
                                             else {
                                                 println!("REQUESTED adding barrier {:?}", self.local_id.clone());
@@ -354,7 +354,7 @@ impl Decision {
                                         }
                                         OrderStatus::Completed => {
                                             local_order.barrier.insert(self.local_id.clone());
-                                            self.handle_barrier().await;
+                                            //self.handle_barrier().await;
                                         }
                                     }
                                 }
