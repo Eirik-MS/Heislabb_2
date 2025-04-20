@@ -299,13 +299,13 @@ impl Decision {
         //3. handle hall order logic
         {
             let mut local_msg = self.local_broadcastmessage.write().await;
- 
+            let source_id = local_msg.source_id.clone();
             for (elev_id, received_orders) in &recvd.orders {
                 for received_order in received_orders {
                     if received_order.call == 0 || received_order.call == 1 { //hall order
                         let mut found = false;
  
-                        for (_, local_orders) in local_msg.orders.iter_mut() {
+                        for (lid, local_orders) in local_msg.orders.iter_mut() {
                             for local_order in local_orders.iter_mut() {
                                 if local_order.floor == received_order.floor //find unique hall order
                                     && local_order.call == received_order.call
@@ -322,6 +322,10 @@ impl Decision {
                                                 local_order.status = OrderStatus::Confirmed;
                                                 local_order.barrier.clear(); //for clean finish
                                                 //self.hall_order_assigner().await;
+                                                if *lid == source_id {
+                                                    self.orders_recived_confirmed_tx.send(local_order.clone()).await;
+                                                    self.elevator_assigned_orders_tx.send(local_order.clone()).await;
+                                                }
                                             } 
                                             else {
                                                 local_order.barrier.clear(); 
@@ -338,6 +342,10 @@ impl Decision {
                                                 local_order.status = OrderStatus::Confirmed; // TRUST
                                                 local_order.barrier.clear(); 
                                                // self.hall_order_assigner().await;
+                                               if *lid == source_id {
+                                                self.orders_recived_confirmed_tx.send(local_order.clone()).await;
+                                                self.elevator_assigned_orders_tx.send(local_order.clone()).await;
+                                               }
                                             }
                                             else {
                                                 println!("REQUESTED adding barrier {:?}", self.local_id.clone());
