@@ -268,7 +268,9 @@ impl Decision {
  
     async fn handle_recv_broadcast(&self, recvd: BroadcastMessage) {
         println!("start handle broadcast function");
+        //TODO if i have no state and no cab orders, trust others, backup
         //1. handle elevatros states = if not dont care
+        //take other elevs states for cost function
         {
             let mut local_broadcast = self.local_broadcastmessage.write().await;
             
@@ -285,7 +287,7 @@ impl Decision {
  
             for (elev_id, orders) in recvd.orders.iter() {
                 for order in orders {
-                    if order.call == 2 {
+                    if order.call == 2 { //CAB
                         if elev_id != &self.local_id {
                             local_broadcast.orders.insert(elev_id.clone(), orders.clone());
                         }
@@ -305,7 +307,7 @@ impl Decision {
  
                         for (_, local_orders) in local_msg.orders.iter_mut() {
                             for local_order in local_orders.iter_mut() {
-                                if local_order.floor == received_order.floor //fin unique hall order
+                                if local_order.floor == received_order.floor //find unique hall order
                                     && local_order.call == received_order.call
                                 {
                                     found = true;
@@ -314,21 +316,35 @@ impl Decision {
                                         OrderStatus::Noorder => {
                                             if received_order.status == OrderStatus::Requested {
                                                 local_order.status = OrderStatus::Requested;
+                                                println!("REQUESTED attaching barrier {:?}", self.local_id.clone());
                                                 local_order.barrier.insert(self.local_id.clone());
                                             } else if received_order.status == OrderStatus::Confirmed {
                                                 local_order.status = OrderStatus::Confirmed;
                                                 local_order.barrier.clear(); //for clean finish
+                                            } else if received_order.status == OrderStatus::Completed { //trust others and ack
+                                                local_order.status = OrderStatus::Completed;
+                                                local_order.barrier.insert(self.local_id.clone());
+                                                self.handle_barrier().await;
                                             }
                                         }
-                                        OrderStatus::Requested | OrderStatus::Completed => {
-                                            //do nothing, handled by barrier
-                                            local_order.barrier.insert(self.local_id.clone()); // anyway
+                                        OrderStatus::Requested => {
+                                            if received_order.status == OrderStatus::Confirmed {
+                                                println!("REQUESTED removing barrier {:?}", self.local_id.clone());
+                                                local_order.status = OrderStatus::Confirmed; // TRUST
+                                                local_order.barrier.clear(); 
+                                            }
                                         }
                                         OrderStatus::Confirmed => {
                                             if received_order.status == OrderStatus::Completed {
                                                 local_order.status = OrderStatus::Completed;
+                                                println!("COMPLETED attaching barrier {:?}", self.local_id.clone());
                                                 local_order.barrier.insert(self.local_id.clone());
                                             }
+                                            // else other elevs come here
+                                        }
+                                        OrderStatus::Completed => {
+                                            local_order.barrier.insert(self.local_id.clone());
+                                            self.handle_barrier().await;
                                         }
                                     }
                                 }
@@ -344,12 +360,12 @@ impl Decision {
                     }
                 }
             }
-            //println!("received message: {:?}", recvd);
+            println!("received message: {:#?}", recvd);
  
             for (id, state) in recvd.states { //merging
                 local_msg.states.insert(id, state);
             }
-            //println!("local message: {:?}", local_msg);
+            println!("local message: {:#?}", local_msg);
         }
     }
  
@@ -382,7 +398,7 @@ impl Decision {
                 }
             }
         }
-        println!("dead elev in its handler {:?}", dead_elev_guard);
+        //println!("dead elev in its handler {:?}", dead_elev_guard);
         modified
     }
  
@@ -401,10 +417,10 @@ impl Decision {
               println!("alive elevs: {:?}", alive_elevators);
               println!("dead elevs: {:?}", dead_elevators);
            let mut broadcast_msg = self.local_broadcastmessage.write().await;
-           println!("message: {:?}", broadcast_msg);
+           //println!("message: {:?}", broadcast_msg);
            for (_elev_id, orders) in &mut broadcast_msg.orders {
                for order in orders.iter_mut() {
-                   //println!("Checking order: {:?}", order);
+                   println!("Checking order: {:?}", order);
                    if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
                        println!("changing status");
                        order.status = OrderStatus::Confirmed;
@@ -562,7 +578,7 @@ impl Decision {
 
         broadcast.orders = new_orders;
       //  println!("Hall order assigner finished.");
-      println!("message: {:?}", broadcast);
+     // println!("message: {:?}", broadcast);
  
     }
  
