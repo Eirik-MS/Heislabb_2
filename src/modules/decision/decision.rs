@@ -316,8 +316,9 @@ impl Decision {
                                         OrderStatus::Noorder => {
                                             if received_order.status == OrderStatus::Requested {
                                                 local_order.status = OrderStatus::Requested;
-                                                println!("REQUESTED attaching barrier {:?}", self.local_id.clone());
-                                                local_order.barrier.insert(self.local_id.clone());
+                                                println!("REQUESTED attaching barrier to barrier {:?}", local_order.barrier);
+                                                local_order.barrier.insert(elev_id.clone());
+                                                println!("CURRENT barrier {:?}", local_order.barrier);
                                             } else if received_order.status == OrderStatus::Confirmed {
                                                 local_order.status = OrderStatus::Confirmed;
                                                 local_order.barrier.clear(); //for clean finish
@@ -348,20 +349,22 @@ impl Decision {
                                                }
                                             }
                                             else {
-                                                println!("REQUESTED adding barrier {:?}", self.local_id.clone());
-                                                local_order.barrier.insert(self.local_id.clone());
+                                                println!("REQUESTED adding barrier to barrir {:?}", local_order.barrier);
+                                                local_order.barrier.insert(elev_id.clone());
+                                                println!("CURRENT barrier {:?}", local_order.barrier);
                                             }
                                         }
                                         OrderStatus::Confirmed => {
                                             if received_order.status == OrderStatus::Completed {
                                                 local_order.status = OrderStatus::Completed;
                                                 println!("COMPLETED attaching barrier {:?}", self.local_id.clone());
-                                                local_order.barrier.insert(self.local_id.clone());
+                                                local_order.barrier.insert(elev_id.clone());
                                             }
                                             // else other elevs come here
                                         }
                                         OrderStatus::Completed => {
-                                            local_order.barrier.insert(self.local_id.clone());
+                                            println!("COMPLETED attaching barrier {:?}", self.local_id.clone());
+                                            local_order.barrier.insert(elev_id.clone());
                                             //self.handle_barrier().await;
                                         }
                                     }
@@ -445,7 +448,7 @@ impl Decision {
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); 
                        status_changed = true;
-                       println!("sending to elevator");
+                       println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
                        if source_id == *_elev_id {
                         self.elevator_assigned_orders_tx.send(order.clone()).await;
                         self.orders_recived_confirmed_tx.send(order.clone()).await;
@@ -457,6 +460,7 @@ impl Decision {
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); // anyway
                        status_changed = true;
+                       println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
                        if source_id == *_elev_id {
                         self.elevator_assigned_orders_tx.send(order.clone()).await;
                         self.orders_recived_confirmed_tx.send(order.clone()).await;
