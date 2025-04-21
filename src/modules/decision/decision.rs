@@ -441,20 +441,22 @@ impl Decision {
                    println!("Checking order: {:?}", order);
                    if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
                        println!("changing status");
-                       order.status = OrderStatus::Confirmed;
-                       order.barrier.clear(); //TODO attach thi elev ID???? NO!
-                       status_changed = true;
-                       self.orders_recived_confirmed_tx.send(order.clone()).await;
                        self.elevator_assigned_orders_tx.send(order.clone()).await;
+                       order.status = OrderStatus::Confirmed;
+                       order.barrier.clear(); 
+                       status_changed = true;
+                       println!("sending to elevator");
+                       self.orders_recived_confirmed_tx.send(order.clone()).await;
  
                    }
                    if order.status == OrderStatus::Requested && order.call == 2 && order.barrier.is_empty() {
                        println!("CAB order without barrier, setting to confirmed.");
+                       self.elevator_assigned_orders_tx.send(order.clone()).await;
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); // anyway
                        status_changed = true;
                        self.orders_recived_confirmed_tx.send(order.clone()).await;
-                       self.elevator_assigned_orders_tx.send(order.clone()).await;
+                       
                    }
                }
  
