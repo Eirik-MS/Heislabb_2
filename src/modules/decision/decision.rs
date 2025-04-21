@@ -288,7 +288,7 @@ impl Decision {
             for (elev_id, orders) in recvd.orders.iter() {
                 for order in orders {
                     if order.call == 2 { //CAB
-                        if elev_id != &self.local_id {
+                        if recvd.source_id != self.local_id {
                             local_broadcast.orders.insert(elev_id.clone(), orders.clone());
                         }
                     }
