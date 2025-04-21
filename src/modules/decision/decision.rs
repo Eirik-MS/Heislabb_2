@@ -460,8 +460,8 @@ impl Decision {
                        }
  
                    }
-                   if order.status == OrderStatus::Requested && order.call == 2 && order.barrier.is_empty() {
-                       println!("CAB order without barrier, setting to confirmed.");
+                   if order.status == OrderStatus::Requested && order.call == 2 {
+                       println!("CAB order, setting to confirmed.");
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); // anyway
                        status_changed = true;
