@@ -300,6 +300,7 @@ impl Decision {
         {
             let mut local_msg = self.local_broadcastmessage.write().await;
             let source_id = local_msg.source_id.clone();
+            //let recv_id = recvd.source_id.clone();
             for (elev_id, received_orders) in &recvd.orders {
                 for received_order in received_orders {
                     if received_order.call == 0 || received_order.call == 1 { //hall order
@@ -317,7 +318,7 @@ impl Decision {
                                             if received_order.status == OrderStatus::Requested {
                                                 local_order.status = OrderStatus::Requested;
                                                 println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
-                                                local_order.barrier.insert(elev_id.clone());
+                                                local_order.barrier.insert(recvd.source_id.clone());
                                                 local_order.barrier.insert(self.local_id.clone());
                                                 println!("CURRENT barrier {:?}", local_order.barrier);
                                             } else if received_order.status == OrderStatus::Confirmed {
@@ -325,6 +326,7 @@ impl Decision {
                                                 local_order.barrier.clear(); //for clean finish
                                                 //self.hall_order_assigner().await;
                                                 if *lid == source_id {
+                                                    println!("sending order {:?} with id {:?}", local_order.clone(), source_id);
                                                     self.orders_recived_confirmed_tx.send(local_order.clone()).await;
                                                     self.elevator_assigned_orders_tx.send(local_order.clone()).await;
                                                 }
@@ -345,13 +347,14 @@ impl Decision {
                                                 local_order.barrier.clear(); 
                                                // self.hall_order_assigner().await;
                                                if *lid == source_id {
+                                                println!("sending order {:?} with id {:?}", local_order.clone(), source_id);
                                                 self.orders_recived_confirmed_tx.send(local_order.clone()).await;
                                                 self.elevator_assigned_orders_tx.send(local_order.clone()).await;
                                                }
                                             }
                                             else {
                                                 println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
-                                                local_order.barrier.insert(elev_id.clone());
+                                                local_order.barrier.insert(recvd.source_id.clone());
                                                 local_order.barrier.insert(self.local_id.clone());
                                                 println!("CURRENT barrier {:?}", local_order.barrier);
                                             }
@@ -360,7 +363,7 @@ impl Decision {
                                             if received_order.status == OrderStatus::Completed {
                                                 local_order.status = OrderStatus::Completed;
                                                 println!("COMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
-                                                local_order.barrier.insert(elev_id.clone());
+                                                local_order.barrier.insert(recvd.source_id.clone());
                                                 local_order.barrier.insert(self.local_id.clone());
                                                 println!("CURRENT barrier {:?}", local_order.barrier);
                                             }
@@ -368,7 +371,7 @@ impl Decision {
                                         }
                                         OrderStatus::Completed => {
                                             println!("COMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
-                                            local_order.barrier.insert(elev_id.clone());
+                                            local_order.barrier.insert(recvd.source_id.clone());
                                             local_order.barrier.insert(self.local_id.clone());
                                             println!("CURRENT barrier {:?}", local_order.barrier);
                                         }
@@ -455,6 +458,7 @@ impl Decision {
                        status_changed = true;
                        println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
                        if source_id == *_elev_id {
+                        println!("sending order {:?} with id {:?}", order.clone(), source_id);
                         self.elevator_assigned_orders_tx.send(order.clone()).await;
                         self.orders_recived_confirmed_tx.send(order.clone()).await;
                        }
@@ -472,6 +476,7 @@ impl Decision {
                        status_changed = true;
                        println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
                        if source_id == *_elev_id {
+                        println!("sending order {:?} with id {:?}", order.clone(), source_id);
                         self.elevator_assigned_orders_tx.send(order.clone()).await;
                         self.orders_recived_confirmed_tx.send(order.clone()).await;
                        }
