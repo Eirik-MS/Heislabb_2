@@ -288,7 +288,7 @@ impl Decision {
 
             // First, check if there are any CAB orders at all
             let mut any_cab_orders = false;
-            for orders in recvd.orders.values() {
+            for orders in local_broadcast.orders.values() {
                 if orders.iter().any(|order| order.call == 2) {
                     any_cab_orders = true;
                     break;
@@ -299,7 +299,7 @@ impl Decision {
             for (elev_id, orders) in recvd.orders.iter() {
                 for order in orders {
                     if order.call == 2 { // CAB
-                        println!("CAB order received: elev id {:?}, my id {:?}", elev_id, self.local_id);
+                        println!("CAB order received: elev id {:?}, my id {:?}, i have cab orders {:?}", elev_id, self.local_id, any_cab_orders);
                         if any_cab_orders {
                             if elev_id != &self.local_id {
                                 local_broadcast.orders.insert(elev_id.clone(), orders.clone());
@@ -308,7 +308,6 @@ impl Decision {
                             // No CAB orders elsewhere, so include even from local
                             local_broadcast.orders.insert(elev_id.clone(), orders.clone());
                         }
-                        break; // No need to check other orders from same elevator
                     }
                 }
             }
@@ -487,7 +486,8 @@ impl Decision {
                 //     self.elevator_assigned_orders_tx.send(order.clone()).await;
                 //     self.orders_recived_confirmed_tx.send(order.clone()).await;
                 //    }
-                   if order.status == OrderStatus::Requested && order.call == 2 {
+                   println!("modyfing my CAB orders if recv id {:?} matches my id {:?}",*_elev_id, self.local_id);
+                   if order.status == OrderStatus::Requested && order.call == 2 && *_elev_id == self.local_id{
                        println!("CAB order, setting to confirmed.");
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); // anyway
@@ -523,10 +523,18 @@ impl Decision {
            //check if we can move from finished to NoOrder, clean barrier
            for (_elev_id, orders) in &mut broadcast_msg.orders {
                for order in orders.iter_mut() {
-                   if order.status == OrderStatus::Completed && alive_elevators.is_subset(&order.barrier) {
-                       order.status = OrderStatus::Noorder;
-                       order.barrier.clear();
-                   }
+                
+                if order.status == OrderStatus::Completed && alive_elevators.is_subset(&order.barrier) {
+                    order.status = OrderStatus::Noorder;
+                    order.barrier.clear();
+                }
+                println!("modyfing my CAB orders if recv id {:?} matches my id {:?}",*_elev_id, self.local_id);
+                if *_elev_id == self.local_id { //modify my cab orders only
+                    if order.status == OrderStatus::Completed && order.call == 2 {
+                        order.status = OrderStatus::Noorder;
+                        order.barrier.clear();
+                    }
+                }
                }
            }
        }
