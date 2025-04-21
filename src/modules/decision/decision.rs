@@ -316,8 +316,9 @@ impl Decision {
                                         OrderStatus::Noorder => {
                                             if received_order.status == OrderStatus::Requested {
                                                 local_order.status = OrderStatus::Requested;
-                                                println!("REQUESTED attaching barrier to barrier {:?}", local_order.barrier);
+                                                println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
                                                 local_order.barrier.insert(elev_id.clone());
+                                                local_order.barrier.insert(self.local_id.clone());
                                                 println!("CURRENT barrier {:?}", local_order.barrier);
                                             } else if received_order.status == OrderStatus::Confirmed {
                                                 local_order.status = OrderStatus::Confirmed;
@@ -349,23 +350,27 @@ impl Decision {
                                                }
                                             }
                                             else {
-                                                println!("REQUESTED adding barrier to barrir {:?}", local_order.barrier);
+                                                println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
                                                 local_order.barrier.insert(elev_id.clone());
+                                                local_order.barrier.insert(self.local_id.clone());
                                                 println!("CURRENT barrier {:?}", local_order.barrier);
                                             }
                                         }
                                         OrderStatus::Confirmed => {
                                             if received_order.status == OrderStatus::Completed {
                                                 local_order.status = OrderStatus::Completed;
-                                                println!("COMPLETED attaching barrier {:?}", self.local_id.clone());
+                                                println!("COMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
                                                 local_order.barrier.insert(elev_id.clone());
+                                                local_order.barrier.insert(self.local_id.clone());
+                                                println!("CURRENT barrier {:?}", local_order.barrier);
                                             }
                                             // else other elevs come here
                                         }
                                         OrderStatus::Completed => {
-                                            println!("COMPLETED attaching barrier {:?}", self.local_id.clone());
+                                            println!("COMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
                                             local_order.barrier.insert(elev_id.clone());
-                                            //self.handle_barrier().await;
+                                            local_order.barrier.insert(self.local_id.clone());
+                                            println!("CURRENT barrier {:?}", local_order.barrier);
                                         }
                                     }
                                 }
