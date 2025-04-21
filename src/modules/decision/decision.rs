@@ -459,6 +459,10 @@ impl Decision {
                         self.orders_recived_confirmed_tx.send(order.clone()).await;
                        }
  
+                   } else if order.status == OrderStatus::Confirmed && source_id == *_elev_id{
+                    println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
+                    self.elevator_assigned_orders_tx.send(order.clone()).await;
+                    self.orders_recived_confirmed_tx.send(order.clone()).await;
                    }
                    if order.status == OrderStatus::Requested && order.call == 2 {
                        println!("CAB order, setting to confirmed.");
@@ -470,7 +474,12 @@ impl Decision {
                         self.elevator_assigned_orders_tx.send(order.clone()).await;
                         self.orders_recived_confirmed_tx.send(order.clone()).await;
                        }
+                   } else if order.status == OrderStatus::Confirmed && source_id == *_elev_id && order.call == 2 {
+                    println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
+                    self.elevator_assigned_orders_tx.send(order.clone()).await;
+                    self.orders_recived_confirmed_tx.send(order.clone()).await;
                    }
+                   
                }
  
            }
