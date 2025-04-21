@@ -435,28 +435,32 @@ impl Decision {
               println!("alive elevs: {:?}", alive_elevators);
               println!("dead elevs: {:?}", dead_elevators);
            let mut broadcast_msg = self.local_broadcastmessage.write().await;
+           let source_id = broadcast_msg.source_id.clone();
            //println!("message: {:?}", broadcast_msg);
            for (_elev_id, orders) in &mut broadcast_msg.orders {
                for order in orders.iter_mut() {
                    println!("Checking order: {:?}", order);
                    if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
                        println!("changing status");
-                       self.elevator_assigned_orders_tx.send(order.clone()).await;
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); 
                        status_changed = true;
                        println!("sending to elevator");
-                       self.orders_recived_confirmed_tx.send(order.clone()).await;
+                       if source_id == *_elev_id {
+                        self.elevator_assigned_orders_tx.send(order.clone()).await;
+                        self.orders_recived_confirmed_tx.send(order.clone()).await;
+                       }
  
                    }
                    if order.status == OrderStatus::Requested && order.call == 2 && order.barrier.is_empty() {
                        println!("CAB order without barrier, setting to confirmed.");
-                       self.elevator_assigned_orders_tx.send(order.clone()).await;
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); // anyway
                        status_changed = true;
-                       self.orders_recived_confirmed_tx.send(order.clone()).await;
-                       
+                       if source_id == *_elev_id {
+                        self.elevator_assigned_orders_tx.send(order.clone()).await;
+                        self.orders_recived_confirmed_tx.send(order.clone()).await;
+                       }
                    }
                }
  
