@@ -275,6 +275,7 @@ impl Decision {
             let mut local_broadcast = self.local_broadcastmessage.write().await;
             
             for (id, state) in recvd.states.iter() {
+                println!("STATES received state id {:?}, my state id {:?}", id, self.local_id);
                 if id != &self.local_id { //keep local state
                     local_broadcast.states.insert(id.clone(), state.clone());
                 }
@@ -284,13 +285,30 @@ impl Decision {
         //2. handle cab orders = if mine dont care as in i know better
         {
             let mut local_broadcast = self.local_broadcastmessage.write().await;
- 
+
+            // First, check if there are any CAB orders at all
+            let mut any_cab_orders = false;
+            for orders in recvd.orders.values() {
+                if orders.iter().any(|order| order.call == 2) {
+                    any_cab_orders = true;
+                    break;
+                }
+            }
+
+            // Now decide what to do based on whether CAB orders exist
             for (elev_id, orders) in recvd.orders.iter() {
                 for order in orders {
-                    if order.call == 2 { //CAB
-                        if recvd.source_id != self.local_id {
+                    if order.call == 2 { // CAB
+                        println!("CAB order received: elev id {:?}, my id {:?}", elev_id, self.local_id);
+                        if any_cab_orders {
+                            if elev_id != &self.local_id {
+                                local_broadcast.orders.insert(elev_id.clone(), orders.clone());
+                            }
+                        } else {
+                            // No CAB orders elsewhere, so include even from local
                             local_broadcast.orders.insert(elev_id.clone(), orders.clone());
                         }
+                        break; // No need to check other orders from same elevator
                     }
                 }
             }
