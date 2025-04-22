@@ -645,9 +645,8 @@ impl Decision {
                         "Sending new confirmed order from elevator {}: floor {}, call {:?}",
                         elevator_id, new_order.floor, new_order.call
                     );
-                    if let Err(e) = self.elevator_assigned_orders_tx.send(new_order.clone()).await {
-                        eprintln!("Failed to send confirmed order: {}", e);
-                    }
+                    self.elevator_assigned_orders_tx.send(new_order.clone()).await;
+                    self.orders_recived_confirmed_tx.send(new_order.clone()).await;
                 }
             }
         }
