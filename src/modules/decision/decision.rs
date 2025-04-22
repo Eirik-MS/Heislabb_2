@@ -88,33 +88,6 @@ impl Decision {
                        self.handle_new_order(order).await;
                        self.hall_order_assigner().await;
                        self.handle_barrier().await;
-
-
-
-
-
-
-                       let mut local_msg = self.local_broadcastmessage.read().await.clone();       
-                       for (lid, local_orders) in local_msg.orders.iter_mut() {
-                           for local_order in local_orders.iter_mut() {
-                               match local_order.status {
-                                   OrderStatus::Confirmed => {
-                                    //println!("sending to elevator source id {:?} while order id {:?}, expression is {:?}, hall order: {:?}", self.local_id, *lid, (*lid == self.local_id),  (local_order.call == 0 || local_order.call == 1)); 
-                                       if *lid == self.local_id && (local_order.call == 0 || local_order.call == 1) {
-                                           println!("sending order {:?} with id {:?}", local_order.clone(), self.local_id);
-                                           self.orders_recived_confirmed_tx.send(local_order.clone()).await;
-                                           self.elevator_assigned_orders_tx.send(local_order.clone()).await;
-                                       }
-                                   }
-                                   _ => {}
-                               }
-                           }
-                       }
-
-
-
-
-
                     }
                     None => {
                         println!("new_order_rx channel closed.");
@@ -163,27 +136,6 @@ impl Decision {
                         self.hall_order_assigner().await;
                         self.handle_recv_broadcast(recvd).await;
                         self.handle_barrier().await;
-
-
-                let mut local_msg = self.local_broadcastmessage.read().await.clone();       
-                for (lid, local_orders) in local_msg.orders.iter_mut() {
-                    for local_order in local_orders.iter_mut() {
-                        match local_order.status {
-                            OrderStatus::Confirmed => {
-                                //println!("sending to elevator source id {:?} while order id {:?}, expression is {:?}, hall order: {:?}", self.local_id, *lid, (*lid == self.local_id),  (local_order.call == 0 || local_order.call == 1)); 
-                                if *lid == self.local_id && (local_order.call == 0 || local_order.call == 1) {
-                                    println!("sending order {:?} with id {:?}", local_order.clone(), self.local_id);
-                                    self.orders_recived_confirmed_tx.send(local_order.clone()).await;
-                                    self.elevator_assigned_orders_tx.send(local_order.clone()).await;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-
-
                         
                     }
                     None => {
@@ -208,7 +160,7 @@ impl Decision {
         }
         
  
-        self.handle_barrier().await;
+    //    self.handle_barrier().await;
         
         // //braodcasting message
         let local_msg = self.local_broadcastmessage.read().await.clone();
@@ -366,7 +318,7 @@ impl Decision {
                 }
             }
         }
-
+ 
         //3. handle hall order logic
         {
             let mut local_msg = self.local_broadcastmessage.write().await;
@@ -408,13 +360,11 @@ impl Decision {
                                                 local_order.status = OrderStatus::Confirmed; // TRUST
                                                 local_order.barrier.clear(); 
                                                // self.hall_order_assigner().await;
-                                            //    if *lid == self.local_id {
-                                            //     println!("sending order (Requested->confirmed) {:?} with id {:?}", local_order.clone(), source_id);
-                                            //     self.orders_recived_confirmed_tx.send(local_order.clone()).await;
-                                            //     self.elevator_assigned_orders_tx.send(local_order.clone()).await;
-                                            //    }
-                                            //    println!("local order: {:#?} belongs to {:?}", local_order, lid);
-                                            //    println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
+                                               if *lid == self.local_id {
+                                                println!("sending order (Requested->confirmed) {:?} with id {:?}", local_order.clone(), source_id);
+                                                self.orders_recived_confirmed_tx.send(local_order.clone()).await;
+                                                self.elevator_assigned_orders_tx.send(local_order.clone()).await;
+                                               }
                                             }
                                             else {
                                                 println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
@@ -527,12 +477,12 @@ impl Decision {
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); 
                        status_changed = true;
-                     //  println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
-                    //    if self.local_id == *_elev_id {
-                    //     println!("sending order {:?} with id {:?}", order.clone(), source_id);
-                    //     self.elevator_assigned_orders_tx.send(order.clone()).await;
-                    //     self.orders_recived_confirmed_tx.send(order.clone()).await;
-                    //    }
+                       println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
+                       if self.local_id == *_elev_id {
+                        println!("sending order {:?} with id {:?}", order.clone(), source_id);
+                        self.elevator_assigned_orders_tx.send(order.clone()).await;
+                        self.orders_recived_confirmed_tx.send(order.clone()).await;
+                       }
  
                    } 
                    //println!("modyfing my CAB orders if recv id {:?} matches my id {:?}",*_elev_id, self.local_id);
@@ -541,12 +491,12 @@ impl Decision {
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); // anyway
                        status_changed = true;
-                     //  println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
-                    //    if self.local_id == *_elev_id {
-                    //     println!("sending order {:?} with id {:?}", order.clone(), source_id);
-                    //     self.elevator_assigned_orders_tx.send(order.clone()).await;
-                    //     self.orders_recived_confirmed_tx.send(order.clone()).await;
-                    //    }
+                       println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
+                       if self.local_id == *_elev_id {
+                        println!("sending order {:?} with id {:?}", order.clone(), source_id);
+                        self.elevator_assigned_orders_tx.send(order.clone()).await;
+                        self.orders_recived_confirmed_tx.send(order.clone()).await;
+                       }
                    } 
                    
                }
@@ -645,9 +595,7 @@ impl Decision {
             }
  
             if let Some(best_id) = best_elev {
-                let order_clone = order.clone();
                 new_orders.entry(best_id.clone()).or_default().push(order);
-                println!("order {:#?} is assigned to elev {:?}", order_clone, best_elev)
             }
         }
         //add existing cab orders
