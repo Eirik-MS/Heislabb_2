@@ -161,7 +161,7 @@ impl Decision {
         }
         
  
-    //    self.handle_barrier().await;
+        self.handle_barrier().await;
         
         // //braodcasting message
         let local_msg = self.local_broadcastmessage.read().await.clone();
