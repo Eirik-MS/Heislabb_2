@@ -98,6 +98,7 @@ impl Decision {
             order_completed = self.order_completed_rx.recv() => {
                 match order_completed {
                     Some(completed_floor) => {
+                       println!("COMPLETED FLOOR {:?}", completed_floor);
                        self.handle_order_completed(completed_floor).await;
                       // self.hall_order_assigner().await; //status changes but not reassigned until needed
                     }
@@ -134,6 +135,7 @@ impl Decision {
                         //println!("Received broadcast message in Decision: {:?}", recvd);
                         self.handle_recv_broadcast(recvd).await;
                     // /   self.hall_order_assigner().await;
+                        self.handle_barrier().await;
                         
                     }
                     None => {
@@ -158,7 +160,7 @@ impl Decision {
         }
         
  
-       self.handle_barrier().await;
+    //    self.handle_barrier().await;
         
         // //braodcasting message
         let local_msg = self.local_broadcastmessage.read().await.clone();
