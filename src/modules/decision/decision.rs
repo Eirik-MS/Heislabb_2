@@ -402,7 +402,7 @@ impl Decision {
                         }
  
                         if !found {
-                            local_msg.orders.entry(self.local_id.clone())
+                            local_msg.orders.entry(elev_id.clone())
                                 .or_insert_with(Vec::new)
                                 .push(received_order.clone());
                         }
