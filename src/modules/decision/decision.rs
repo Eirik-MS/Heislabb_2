@@ -86,7 +86,7 @@ impl Decision {
                     Some(order) => {
                         println!("New order received: {:?}", order);
                        self.handle_new_order(order).await;
-                      // / self.hall_order_assigner().await;
+                       self.hall_order_assigner().await;
                        self.handle_barrier().await;
                     }
                     None => {
@@ -134,7 +134,7 @@ impl Decision {
                     Some(recvd) => {
                         //println!("Received broadcast message in Decision: {:?}", recvd);
                         self.handle_recv_broadcast(recvd).await;
-                    // /   self.hall_order_assigner().await;
+                       self.hall_order_assigner().await;
                         self.handle_barrier().await;
                         
                     }
