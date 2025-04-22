@@ -133,8 +133,9 @@ impl Decision {
                 match recvd_broadcast_message {
                     Some(recvd) => {
                         //println!("Received broadcast message in Decision: {:?}", recvd);
+                        self.hall_order_assigner().await;
                         self.handle_recv_broadcast(recvd).await;
-                       self.hall_order_assigner().await;
+                       
                         self.handle_barrier().await;
                         
                     }
@@ -391,8 +392,8 @@ impl Decision {
                                                 local_order.barrier.insert(self.local_id.clone());
                                                 println!("CURRENT barrier {:?}", local_order.barrier);
 
-                                                println!("local order: {:#?}", local_order);
-                                                println!("received order: {:#?}", received_order);
+                                                println!("local order: {:#?} belongs to {:?}", local_order, lid);
+                                                println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
                                             }
                                             // else other elevs come here
                                         }
@@ -401,9 +402,9 @@ impl Decision {
                                             local_order.barrier.insert(recvd.source_id.clone());
                                             local_order.barrier.insert(self.local_id.clone());
                                             println!("CURRENT barrier {:?}", local_order.barrier);
-                                            
-                                            println!("local order: {:#?}", local_order);
-                                            println!("received order: {:#?}", received_order);
+
+                                            println!("local order: {:#?} belongs to {:?}", local_order, lid);
+                                            println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
                                         }
                                     }
                                 }
