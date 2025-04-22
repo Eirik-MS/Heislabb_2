@@ -133,8 +133,9 @@ impl Decision {
                 match recvd_broadcast_message {
                     Some(recvd) => {
                         //println!("Received broadcast message in Decision: {:?}", recvd);
-                        self.handle_recv_broadcast(recvd).await;
                         self.hall_order_assigner().await;
+                        self.handle_recv_broadcast(recvd).await;
+                        
                         self.handle_barrier().await;
                         
                     }
