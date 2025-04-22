@@ -286,27 +286,43 @@ impl Decision {
         {
             let mut local_broadcast = self.local_broadcastmessage.write().await;
 
-            // First, check if there are any CAB orders at all
+            // check if there are any CAB orders at all
             let mut any_cab_orders = false;
-            for orders in local_broadcast.orders.values() {
-                if orders.iter().any(|order| order.call == 2) {
-                    any_cab_orders = true;
-                    break;
+            for (elev_id, orders) in local_broadcast.orders.iter() {
+                if elev_id == &self.local_id {
+                    if orders.iter().any(|order| order.call == 2) {
+                        any_cab_orders = true;
+                        break;
+                    }
                 }
             }
 
             // Now decide what to do based on whether CAB orders exist
             for (elev_id, orders) in recvd.orders.iter() {
                 for order in orders {
-                    if order.call == 2 { // CAB
-                        println!("CAB order received: elev id {:?}, my id {:?}, i have cab orders {:?}", elev_id, self.local_id, any_cab_orders);
+                    if order.call == 2 {
+                        println!("CAB order received: elev id {:?}, my id {:?}", elev_id, self.local_id);
+            
                         if any_cab_orders {
                             if elev_id != &self.local_id {
-                                local_broadcast.orders.insert(elev_id.clone(), orders.clone());
+                                // Insert other elevators' CAB orders under their ID
+                                local_broadcast.orders
+                                    .entry(elev_id.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(order.clone());
                             }
                         } else {
-                            // No CAB orders elsewhere, so include even from local
-                            local_broadcast.orders.insert(elev_id.clone(), orders.clone());
+                            // No CAB orders in the network, accept and insert everything including ours
+                            let insert_id = if elev_id == &self.local_id {
+                                self.local_id.clone()
+                            } else {
+                                elev_id.clone()
+                            };
+            
+                            local_broadcast.orders
+                                .entry(insert_id)
+                                .or_insert_with(Vec::new)
+                                .push(order.clone());
                         }
                     }
                 }
