@@ -133,9 +133,8 @@ impl Decision {
                 match recvd_broadcast_message {
                     Some(recvd) => {
                         //println!("Received broadcast message in Decision: {:?}", recvd);
-                        self.hall_order_assigner().await;
                         self.handle_recv_broadcast(recvd).await;
-                       
+                        self.hall_order_assigner().await;
                         self.handle_barrier().await;
                         
                     }
@@ -304,7 +303,7 @@ impl Decision {
             for (elev_id, orders) in recvd.orders.iter() {
                 for order in orders {
                     if order.call == 2 { // CAB
-                        println!("CAB order received: elev id {:?}, my id {:?}, i have cab orders {:?}", elev_id, self.local_id, any_cab_orders);
+                       // println!("CAB order received: elev id {:?}, my id {:?}, i have cab orders {:?}", elev_id, self.local_id, any_cab_orders);
                         if elev_id != &self.local_id {
                             local_broadcast.orders.insert(elev_id.clone(), orders.clone());
                         } else if elev_id == &self.local_id && !any_cab_orders { //add ,y own orders back
