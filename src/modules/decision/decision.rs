@@ -85,9 +85,9 @@ impl Decision {
                 match new_order {
                     Some(order) => {
                         println!("New order received: {:?}", order);
-                       self.handle_new_order(order).await;
-                       self.hall_order_assigner().await;
-                       self.handle_barrier().await;
+                        self.hall_order_assigner().await;
+                        self.handle_new_order(order).await;
+                        self.handle_barrier().await;
                     }
                     None => {
                         println!("new_order_rx channel closed.");
