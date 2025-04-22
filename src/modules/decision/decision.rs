@@ -346,7 +346,7 @@ impl Decision {
                                                 local_order.status = OrderStatus::Confirmed;
                                                 local_order.barrier.clear(); //for clean finish
                                                 //self.hall_order_assigner().await;
-                                                if *lid == source_id {
+                                                if *lid == self.local_id {
                                                     println!("sending order {:?} with id {:?}", local_order.clone(), source_id);
                                                     self.orders_recived_confirmed_tx.send(local_order.clone()).await;
                                                     self.elevator_assigned_orders_tx.send(local_order.clone()).await;
@@ -367,7 +367,7 @@ impl Decision {
                                                 local_order.status = OrderStatus::Confirmed; // TRUST
                                                 local_order.barrier.clear(); 
                                                // self.hall_order_assigner().await;
-                                               if *lid == source_id {
+                                               if *lid == self.local_id {
                                                 println!("sending order {:?} with id {:?}", local_order.clone(), source_id);
                                                 self.orders_recived_confirmed_tx.send(local_order.clone()).await;
                                                 self.elevator_assigned_orders_tx.send(local_order.clone()).await;
@@ -478,7 +478,7 @@ impl Decision {
                        order.barrier.clear(); 
                        status_changed = true;
                        println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
-                       if source_id == *_elev_id {
+                       if self.local_id == *_elev_id {
                         println!("sending order {:?} with id {:?}", order.clone(), source_id);
                         self.elevator_assigned_orders_tx.send(order.clone()).await;
                         self.orders_recived_confirmed_tx.send(order.clone()).await;
@@ -497,7 +497,7 @@ impl Decision {
                        order.barrier.clear(); // anyway
                        status_changed = true;
                        println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
-                       if source_id == *_elev_id {
+                       if self.local_id == *_elev_id {
                         println!("sending order {:?} with id {:?}", order.clone(), source_id);
                         self.elevator_assigned_orders_tx.send(order.clone()).await;
                         self.orders_recived_confirmed_tx.send(order.clone()).await;
