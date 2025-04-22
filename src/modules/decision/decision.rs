@@ -302,11 +302,9 @@ impl Decision {
                 for order in orders {
                     if order.call == 2 { // CAB
                         println!("CAB order received: elev id {:?}, my id {:?}, i have cab orders {:?}", elev_id, self.local_id, any_cab_orders);
-                        if any_cab_orders {
-                            if elev_id != &self.local_id {
-                                local_broadcast.orders.insert(elev_id.clone(), orders.clone());
-                            }
-                        } else if elev_id == &self.local_id { //add ,y own orders back
+                        if elev_id != &self.local_id {
+                            local_broadcast.orders.insert(elev_id.clone(), orders.clone());
+                        } else if elev_id == &self.local_id && !any_cab_orders { //add ,y own orders back
                             local_broadcast.orders.insert(elev_id.clone(), orders.clone()); //like backup + resend
                             println!("sending order {:?} with id {:?}", order.clone(), elev_id);
                             self.orders_recived_confirmed_tx.send(order.clone()).await;
