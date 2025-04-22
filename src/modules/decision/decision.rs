@@ -300,29 +300,17 @@ impl Decision {
             // Now decide what to do based on whether CAB orders exist
             for (elev_id, orders) in recvd.orders.iter() {
                 for order in orders {
-                    if order.call == 2 {
-                        println!("CAB order received: elev id {:?}, my id {:?}", elev_id, self.local_id);
-            
+                    if order.call == 2 { // CAB
+                        println!("CAB order received: elev id {:?}, my id {:?}, i have cab orders {:?}", elev_id, self.local_id, any_cab_orders);
                         if any_cab_orders {
                             if elev_id != &self.local_id {
-                                // Insert other elevators' CAB orders under their ID
-                                local_broadcast.orders
-                                    .entry(elev_id.clone())
-                                    .or_insert_with(Vec::new)
-                                    .push(order.clone());
+                                local_broadcast.orders.insert(elev_id.clone(), orders.clone());
                             }
-                        } else {
-                            // No CAB orders in the network, accept and insert everything including ours
-                            let insert_id = if elev_id == &self.local_id {
-                                self.local_id.clone()
-                            } else {
-                                elev_id.clone()
-                            };
-            
-                            local_broadcast.orders
-                                .entry(insert_id)
-                                .or_insert_with(Vec::new)
-                                .push(order.clone());
+                        } else if elev_id == &self.local_id { //add ,y own orders back
+                            local_broadcast.orders.insert(elev_id.clone(), orders.clone()); //like backup + resend
+                            println!("sending order {:?} with id {:?}", order.clone(), elev_id);
+                            self.orders_recived_confirmed_tx.send(order.clone()).await;
+                            self.elevator_assigned_orders_tx.send(order.clone()).await;
                         }
                     }
                 }
