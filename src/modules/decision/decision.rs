@@ -85,9 +85,9 @@ impl Decision {
                 match new_order {
                     Some(order) => {
                         println!("New order received: {:?}", order);
-                        self.hall_order_assigner().await;
-                        self.handle_new_order(order).await;
-                        self.handle_barrier().await;
+                       self.handle_new_order(order).await;
+                      // / self.hall_order_assigner().await;
+                       self.handle_barrier().await;
                     }
                     None => {
                         println!("new_order_rx channel closed.");
@@ -133,7 +133,7 @@ impl Decision {
                     Some(recvd) => {
                         //println!("Received broadcast message in Decision: {:?}", recvd);
                         self.handle_recv_broadcast(recvd).await;
-                        self.hall_order_assigner().await;
+                    // /   self.hall_order_assigner().await;
                         
                     }
                     None => {
@@ -402,6 +402,7 @@ impl Decision {
                         }
  
                         if !found {
+                            println!("Recvd unexisting order {:?} with id {:?}", received_order, elev_id);
                             local_msg.orders.entry(elev_id.clone())
                                 .or_insert_with(Vec::new)
                                 .push(received_order.clone());
@@ -653,7 +654,7 @@ impl Decision {
 
 
         broadcast.orders = new_orders;
-      //  println!("Hall order assigner finished.");
+        println!("Hall order assigner finished.");
      // println!("message: {:?}", broadcast);
  
     }
