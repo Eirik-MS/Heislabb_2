@@ -390,6 +390,7 @@ impl Decision {
                                                 local_order.barrier.insert(recvd.source_id.clone());
                                                 local_order.barrier.insert(self.local_id.clone());
                                                 println!("CURRENT barrier {:?}", local_order.barrier);
+
                                                 println!("local order: {:#?}", local_order);
                                                 println!("received order: {:#?}", received_order);
                                             }
@@ -400,6 +401,7 @@ impl Decision {
                                             local_order.barrier.insert(recvd.source_id.clone());
                                             local_order.barrier.insert(self.local_id.clone());
                                             println!("CURRENT barrier {:?}", local_order.barrier);
+                                            
                                             println!("local order: {:#?}", local_order);
                                             println!("received order: {:#?}", received_order);
                                         }
@@ -661,7 +663,7 @@ impl Decision {
 
 
         broadcast.orders = new_orders;
-        println!("Hall order assigner finished.");
+       // println!("Hall order assigner finished.");
      // println!("message: {:?}", broadcast);
  
     }
