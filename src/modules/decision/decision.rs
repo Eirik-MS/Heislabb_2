@@ -215,8 +215,9 @@ impl Decision {
             match order.call {
                 0 | 1 => { // HALL order
                     //In case we already had this order befpore and now it's requested again
-                    for (_, orders) in broadcast_message.orders.iter_mut() {
+                    for (hid, orders) in broadcast_message.orders.iter_mut() {
                         for existing_order in orders.iter_mut() {
+                            println!("checking hall order {:?} belongs to {:?}", existing_order, hid);
                             if existing_order.floor == order.floor &&
                                existing_order.call == order.call &&
                                existing_order.status == OrderStatus::Noorder {
@@ -384,7 +385,17 @@ impl Decision {
                                                 println!("local order: {:#?} belongs to {:?}", local_order, lid);
                                                 println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
                                             }
-                                            // else other elevs come here
+                                            else if received_order.status == OrderStatus::Confirmed {
+                                                println!("Confirmed removing barrier {:?}", self.local_id.clone());
+                                                local_order.status = OrderStatus::Confirmed; // TRUST
+                                                local_order.barrier.clear(); 
+                                               // self.hall_order_assigner().await;
+                                               if *lid == self.local_id {
+                                                println!("sending order (Confirmed->confirmed) {:?} with id {:?}", local_order.clone(), source_id);
+                                                self.orders_recived_confirmed_tx.send(local_order.clone()).await;
+                                                self.elevator_assigned_orders_tx.send(local_order.clone()).await;
+                                               }
+                                            }
                                         }
                                         OrderStatus::Completed => {
                                             println!("cCOMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
@@ -471,7 +482,7 @@ impl Decision {
            //println!("message: {:?}", broadcast_msg);
            for (_elev_id, orders) in &mut broadcast_msg.orders {
                for order in orders.iter_mut() {
-                  // println!("Checking order: {:?}", order);
+                   println!("Checking order: {:?} belonginh {:?}", order, _elev_id);
                    if order.status == OrderStatus::Requested && alive_elevators.is_subset(&order.barrier) {
                        println!("changing status");
                        order.status = OrderStatus::Confirmed;
