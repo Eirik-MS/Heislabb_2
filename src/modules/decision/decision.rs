@@ -345,16 +345,6 @@ impl Decision {
                                                 local_order.barrier.insert(self.local_id.clone());
                                                 println!("CURRENT barrier {:?}", local_order.barrier);
                                             } 
-                                            // else if received_order.status == OrderStatus::Confirmed {
-                                            //     local_order.status = OrderStatus::Confirmed;
-                                            //     local_order.barrier.clear(); //for clean finish
-                                            //     //self.hall_order_assigner().await;
-                                            //     if *lid == self.local_id {
-                                            //         println!("sending order (from Noorder->Confirmed) {:?} with id {:?}", local_order.clone(), source_id);
-                                            //         self.orders_recived_confirmed_tx.send(local_order.clone()).await;
-                                            //         self.elevator_assigned_orders_tx.send(local_order.clone()).await;
-                                            //     }
-                                            // } 
                                             else {
                                                 local_order.barrier.clear(); 
                                             }
@@ -495,11 +485,6 @@ impl Decision {
                        }
  
                    } 
-                //    else if order.status == OrderStatus::Confirmed && source_id == *_elev_id{
-                //     println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
-                //     self.elevator_assigned_orders_tx.send(order.clone()).await;
-                //     self.orders_recived_confirmed_tx.send(order.clone()).await;
-                //    }
                    //println!("modyfing my CAB orders if recv id {:?} matches my id {:?}",*_elev_id, self.local_id);
                    if order.status == OrderStatus::Requested && order.call == 2 && *_elev_id == self.local_id{
                        println!("CAB order, setting to confirmed.");
@@ -513,11 +498,6 @@ impl Decision {
                         self.orders_recived_confirmed_tx.send(order.clone()).await;
                        }
                    } 
-                //    else if order.status == OrderStatus::Confirmed && source_id == *_elev_id && order.call == 2 {
-                //     println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
-                //     self.elevator_assigned_orders_tx.send(order.clone()).await;
-                //     self.orders_recived_confirmed_tx.send(order.clone()).await;
-                //    }
                    
                }
  
@@ -655,8 +635,8 @@ impl Decision {
         //                 "Sending new confirmed order from elevator {}: floor {}, call {:?}",
         //                 elevator_id, new_order.floor, new_order.call
         //             );
-        //             self.elevator_assigned_orders_tx.send(new_order.clone()).await;
-        //             self.orders_recived_confirmed_tx.send(new_order.clone()).await;
+        //             self.elevator assigned_orders_tx.send(new_order.clone()).await;
+        //             self.orders recived_confirmed_tx.send(new_order.clone()).await;
         //         }
         //     }
         // }
