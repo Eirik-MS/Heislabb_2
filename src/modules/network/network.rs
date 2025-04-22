@@ -121,7 +121,7 @@ pub async fn network_reciver(
 
         match UDPlistener(&socket).await {
             Some(message) => {
-                println!("Received message: {:#?}", message);
+                //println!("Received message: {:#?}", message);
                 if !alive_dead_info.last_heartbeat.contains_key(&message.source_id) {
                     alive_dead_info.update_elevator_status(message.source_id.clone(), true);
                     alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
@@ -130,7 +130,7 @@ pub async fn network_reciver(
                 }
 
                 // Send BroadcastMessage to decision
-                println!("Sending message to the decision");
+                //println!("Sending message to the decision");
                 // network_to_decision_tx.send(message.clone()).await;
                 if let Err(e) = network_to_decision_tx.send(message).await {
                     eprintln!("Send failed: {:?}", e);
