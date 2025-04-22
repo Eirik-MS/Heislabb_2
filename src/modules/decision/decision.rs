@@ -165,9 +165,6 @@ impl Decision {
                         self.handle_barrier().await;
 
 
-
-
-                
                 let mut local_msg = self.local_broadcastmessage.read().await.clone();       
                 for (lid, local_orders) in local_msg.orders.iter_mut() {
                     for local_order in local_orders.iter_mut() {
@@ -416,8 +413,8 @@ impl Decision {
                                             //     self.orders_recived_confirmed_tx.send(local_order.clone()).await;
                                             //     self.elevator_assigned_orders_tx.send(local_order.clone()).await;
                                             //    }
-                                               println!("local order: {:#?} belongs to {:?}", local_order, lid);
-                                               println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
+                                            //    println!("local order: {:#?} belongs to {:?}", local_order, lid);
+                                            //    println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
                                             }
                                             else {
                                                 println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
@@ -648,7 +645,9 @@ impl Decision {
             }
  
             if let Some(best_id) = best_elev {
+                let order_clone = order.clone();
                 new_orders.entry(best_id.clone()).or_default().push(order);
+                println!("order {:#?} is assigned to elev {:?}", order_clone, best_elev)
             }
         }
         //add existing cab orders
