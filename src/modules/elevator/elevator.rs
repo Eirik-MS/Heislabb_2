@@ -1,4 +1,3 @@
-use std::default;
 use std::sync::Arc;
 use std::thread::spawn;
 use tokio::time::{sleep, Duration};
@@ -345,7 +344,7 @@ impl ElevatorController {
     //Add an order to the queue
     pub async fn add_order(&self, order: Order) {
         let mut queue = self.queue.write().await;
-        let mut order_exist = queue.iter().any(|q_order| q_order.floor == order.floor && q_order.call == order.call);
+        let order_exist = queue.iter().any(|q_order| q_order.floor == order.floor && q_order.call == order.call);
         if !order_exist {
             queue.push(order);
         

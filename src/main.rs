@@ -5,15 +5,9 @@ use modules::common::*;
 use modules::elevator::*;
 use modules::decision::*;
 use modules::network::*;
-use serde::de;
 use tokio::sync::watch;
 //use std::net::UdpSocket;
 
-use std::collections::HashMap;
-use std::os::unix::net::SocketAddr;
-use std::process::{Command, Stdio};
-use serde::{Deserialize, Serialize};
-use local_ip_address::local_ip;
 use tokio::net::UdpSocket;
 
 
@@ -79,7 +73,7 @@ async fn main() -> std::io::Result<()> {
             orders_confirmed_tx,
         );
         
-        let mut interval = interval(UPDATE_INTERVAL);
+        let interval = interval(UPDATE_INTERVAL);
         loop {
           //  println!("From main looping decision");
             decision.step().await;

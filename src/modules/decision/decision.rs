@@ -1,17 +1,9 @@
 use crate::modules::common::*;
 use std::sync::Arc;
-use crossbeam_channel as cbc; //for message passing
-use serde::Deserialize;
-use serde::Serialize;
-use serde_json::json;
+ //for message passing
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::time::{ Instant};
-use std::process::{Command, Stdio};
-use tokio::time::{sleep, Duration};
 use tokio::sync::{watch, Mutex, RwLock, mpsc};
-use tokio::sync::mpsc::{Sender,Receiver};
-use driver_rust::elevio::elev as e;
 const MAX_FLOORS: usize = 4; //IMPORT FROM MAIN
 // All peers supposed to have:
 // list of elevator states
@@ -587,7 +579,7 @@ impl Decision {
         let mut hall_orders: Vec<Order> = vec![];
         for (_id, orders) in &broadcast.orders {
             for order in orders {
-                if (order.call == 0 || order.call == 1){
+                if order.call == 0 || order.call == 1 {
                     hall_orders.push(order.clone());
                 }
             }
