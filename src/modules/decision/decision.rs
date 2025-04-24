@@ -623,37 +623,37 @@ impl Decision {
  
 
  
-        // // send order one by one to ELEVator        
-        // for (elevator_id, new_orders_list) in &new_orders {
-        //     // Only process orders for the local elevator
-        //     if *elevator_id != self.local_id {
-        //         continue;
-        //     }
+        // send order one by one to ELEVator        
+        for (elevator_id, new_orders_list) in &new_orders {
+            // Only process orders for the local elevator
+            if *elevator_id != self.local_id {
+                continue;
+            }
         
-        //     let old_orders_list = broadcast.orders.get(elevator_id);
+            let old_orders_list = broadcast.orders.get(elevator_id);
         
-        //     for new_order in new_orders_list {
-        //         // Only consider confirmed orders
-        //         if new_order.status != OrderStatus::Confirmed {
-        //             continue;
-        //         }
+            for new_order in new_orders_list {
+                // Only consider confirmed orders
+                if new_order.status != OrderStatus::Confirmed {
+                    continue;
+                }
         
-        //         // Check if this confirmed order is *new* (not in the original broadcast)
-        //         let is_new = match old_orders_list {
-        //             Some(old_orders) => !old_orders.contains(new_order),
-        //             None => true,
-        //         };
+                // Check if this confirmed order is *new* (not in the original broadcast)
+                let is_new = match old_orders_list {
+                    Some(old_orders) => !old_orders.contains(new_order),
+                    None => true,
+                };
         
-        //         if is_new {
-        //             println!(
-        //                 "Sending new confirmed order from elevator {}: floor {}, call {:?}",
-        //                 elevator_id, new_order.floor, new_order.call
-        //             );
-        //             self.elevator assigned_orders_tx.send(new_order.clone()).await;
-        //             self.orders recived_confirmed_tx.send(new_order.clone()).await;
-        //         }
-        //     }
-        // }
+                if is_new {
+                    println!(
+                        "Sending new confirmed order from elevator {}: floor {}, call {:?}",
+                        elevator_id, new_order.floor, new_order.call
+                    );
+                    self.elevator_assigned_orders_tx.send(new_order.clone()).await;
+                    self.orders_recived_confirmed_tx.send(new_order.clone()).await;
+                }
+            }
+        }
 
 
         broadcast.orders = new_orders;
