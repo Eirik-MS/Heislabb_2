@@ -161,6 +161,7 @@ impl ElevatorController {
                     let mut should_stop = false;
                         {
                         println!("Floor sense: {:#?}", floor);
+                        self.elevator.floor_indicator(floor);
                         let mut state = self.state.write().await;
                         state.prev_floor = state.current_floor;
                         state.current_floor = floor;
