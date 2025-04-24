@@ -42,7 +42,7 @@ pub async fn network_sender(
                // println!("Sending message");
                 //socket.set_broadcast(true).expect("Failed to enable UDP broadcast");
 
-                let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30028);
+                let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30029);
                 let serMessage = serde_json::to_string(&message).expect("Failed to serialize message");
 
                 socket.send_to(serMessage.as_bytes(), broadcast_addr).await.expect("Failed to broadcast message on port");
