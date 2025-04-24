@@ -329,12 +329,13 @@ impl Decision {
                 for received_order in received_orders {
 
                     let mut found_order: Option<&mut Order> = None;
-
+                    let mut local_id;
                     if received_order.call == 0 || received_order.call == 1 {
                         for (_lid, local_orders) in local_msg.orders.iter_mut() {
                             for local_order in local_orders.iter_mut() {
                                 if local_order.floor == received_order.floor && local_order.call == received_order.call {
                                     found_order = Some(local_order);
+                                    local_id = _lid.clone();
                                     break;
                                 }
                             }
@@ -342,7 +343,8 @@ impl Decision {
                                 break;
                             }
                         }
- 
+
+                        let local_order = found_order.unwrap();
                         match local_order.status {
                             OrderStatus::Noorder => {
                                 if received_order.status == OrderStatus::Requested {
@@ -368,7 +370,7 @@ impl Decision {
                                     local_order.status = OrderStatus::Confirmed; // TRUST
                                     local_order.barrier.clear(); 
                                    // self.hall_order_assigner().await;
-                                   if *lid == self.local_id {
+                                   if *local_id == self.local_id {
                                     println!("sending order (Requested->confirmed) {:?} with id {:?}", local_order.clone(), source_id);
                                     self.orders_recived_confirmed_tx.send(local_order.clone()).await;
                                     self.elevator_assigned_orders_tx.send(local_order.clone()).await;
@@ -397,13 +399,13 @@ impl Decision {
                                     local_order.status = OrderStatus::Confirmed; // TRUST
                                     local_order.barrier.clear(); 
                                    // self.hall_order_assigner().await;
-                                   if *lid == self.local_id {
-                                    println!("sending order (Confirmed->confirmed) {:?} local id {:?} and received id {:?}", lid, elev_id,local_order.clone());
-                                    println!("local id {:?} and received id {:?}", lid, elev_id);
+                                   if *local_id == self.local_id {
+                                    println!("sending order (Confirmed->confirmed) {:?} local id {:?} and received id {:?}", local_id, elev_id,local_order.clone());
+                                    println!("local id {:?} and received id {:?}", local_id, elev_id);
                                     self.orders_recived_confirmed_tx.send(local_order.clone()).await;
                                     self.elevator_assigned_orders_tx.send(local_order.clone()).await;
                                    }
-                                   println!("local order: {:#?} belongs to {:?}", local_order, lid);
+                                   println!("local order: {:#?} belongs to {:?}", local_order, local_id);
                                    println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
                                 }
                             }
@@ -412,32 +414,28 @@ impl Decision {
                                 local_order.barrier.insert(recvd.source_id.clone());
                                 local_order.barrier.insert(self.local_id.clone());
                                 println!("CURRENT barrier {:?}", local_order.barrier);
-                                println!("local order: {:#?} belongs to {:?}", local_order, lid);
+                                println!("local order: {:#?} belongs to {:?}", local_order, local_id);
                                 println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
                             }
                                     
                                 
                         }
                     }
-                }
- 
-                    if !found {
+                    if found_order.is_none() {
                         println!("Recvd unexisting order {:?} with id {:?}", received_order, elev_id);
                         local_msg.orders.entry(elev_id.clone())
                             .or_insert_with(Vec::new)
                             .push(received_order.clone());
                     }
- 
-                    
-                }
+                } 
             }
-            //println!("received message: {:#?}", recvd);
- 
             for (id, state) in recvd.states { //merging
                 local_msg.states.insert(id, state);
             }
-            //println!("local message: {:#?}", local_msg);
+                //println!("local message: {:#?}", local_msg);
         }
+            //println!("received message: {:#?}", recvd);
+    }
     
  
     pub async fn update_dead_alive_status(&self, deadalive: AliveDeadInfo) -> bool {
