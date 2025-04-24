@@ -345,8 +345,13 @@ impl ElevatorController {
     //Add an order to the queue
     pub async fn add_order(&self, order: Order) {
         let mut queue = self.queue.write().await;
-        queue.push(order);
-        println!("Order added to queue.");
+        let mut order_exist = queue.iter().any(|q_order| q_order.floor == order.floor && q_order.call == order.call);
+        if !order_exist {
+            queue.push(order);
+        
+            println!("Order added to queue.");
+            return;
+        }
     }
 
     //Remove orders from the queue by only keeping the orders that does NOT match the floor given.

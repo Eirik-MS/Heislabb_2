@@ -491,7 +491,7 @@ impl Decision {
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); 
                        status_changed = true;
-                       println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
+                       println!("sending to elevator source id {:?} while order elev id {:?}", source_id, *_elev_id);
                        if self.local_id == *_elev_id {
                         println!("sending order {:?} with id {:?}", order.clone(), source_id);
                         self.elevator_assigned_orders_tx.send(order.clone()).await;
