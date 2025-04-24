@@ -620,7 +620,6 @@ impl Decision {
             let old_orders_list = broadcast.orders.get(elevator_id);
         
             for new_order in new_orders_list {
-                println!("order that might be send {:?}", new_order.clone());
                 // Only consider confirmed orders
                 if new_order.status != OrderStatus::Confirmed {
                     continue;
@@ -646,7 +645,7 @@ impl Decision {
 
         broadcast.orders = new_orders;
        // println!("Hall order assigner finished.");
-     // println!("message: {:?}", broadcast);
+      println!("message: {:#?}", broadcast);
  
     }
  
