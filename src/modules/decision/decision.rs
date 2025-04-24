@@ -285,53 +285,52 @@ impl Decision {
             }
         }
  
-        //2. handle cab orders = if mine dont care as in i know better
-        {
-            let mut local_broadcast = self.local_broadcastmessage.write().await;
+        // //2. handle cab orders = if mine dont care as in i know better
+        // {
+        //     let mut local_broadcast = self.local_broadcastmessage.write().await;
 
-            // check if there are any CAB orders at all
-            let mut any_cab_orders = false;
-            for (elev_id, orders) in local_broadcast.orders.iter() {
-                if elev_id == &self.local_id {
-                    if orders.iter().any(|order| order.call == 2) {
-                        any_cab_orders = true;
-                        break;
-                    }
-                }
-            }
+        //     // check if there are any CAB orders at all
+        //     let mut any_cab_orders = false;
+        //     for (elev_id, orders) in local_broadcast.orders.iter() {
+        //         if elev_id == &self.local_id {
+        //             if orders.iter().any(|order| order.call == 2) {
+        //                 any_cab_orders = true;
+        //                 break;
+        //             }
+        //         }
+        //     }
 
-            // Now decide what to do based on whether CAB orders exist
-            for (elev_id, orders) in recvd.orders.iter() {
-                for order in orders {
-                    if order.call == 2 { // CAB
-                       // println!("CAB order received: elev id {:?}, my id {:?}, i have cab orders {:?}", elev_id, self.local_id, any_cab_orders);
-                        if elev_id != &self.local_id {
-                            local_broadcast.orders.insert(elev_id.clone(), orders.clone());
-                        } else if elev_id == &self.local_id && !any_cab_orders { //add ,y own orders back
-                            println!("I lost my orders, inserting {:?}", order.clone());
-                            local_broadcast.orders.entry(elev_id.clone()).or_insert_with(Vec::new).push(order.clone());
+        //     // Now decide what to do based on whether CAB orders exist
+        //     for (elev_id, orders) in recvd.orders.iter() {
+        //         for order in orders {
+        //             if order.call == 2 { // CAB
+        //                // println!("CAB order received: elev id {:?}, my id {:?}, i have cab orders {:?}", elev_id, self.local_id, any_cab_orders);
+        //                 if elev_id != &self.local_id {
+        //                     local_broadcast.orders.insert(elev_id.clone(), orders.clone());
+        //                 } else if elev_id == &self.local_id && !any_cab_orders { //add ,y own orders back
+        //                     println!("I lost my orders, inserting {:?}", order.clone());
+        //                     local_broadcast.orders.entry(elev_id.clone()).or_insert_with(Vec::new).push(order.clone());
             
-                            if order.status == OrderStatus::Confirmed {
-                                println!("sending order {:?} with id {:?}", order.clone(), elev_id);
-                                self.orders_recived_confirmed_tx.send(order.clone()).await;
-                                self.elevator_assigned_orders_tx.send(order.clone()).await;
-                            }
-                        }
-                    }
-                }
-            }
+        //                     // if order.status == OrderStatus::Confirmed {
+        //                     //     println!("sending order {:?} with id {:?}", order.clone(), elev_id);
+        //                     //     self.orders_recived_confirmed_tx.send(order.clone()).await;
+        //                     //     self.elevator_assigned_orders_tx.send(order.clone()).await;
+        //                     // }
+        //                 }
+        //             }
+        //         }
+        //     }
 
 
-        }
+        // }
  
-        //3. handle hall order logic
         {
             let mut local_msg = self.local_broadcastmessage.write().await;
             let source_id = local_msg.source_id.clone();
             //let recv_id = recvd.source_id.clone();
             for (elev_id, received_orders) in &recvd.orders {
                 for received_order in received_orders {
-                    if received_order.call == 0 || received_order.call == 1 { //hall order
+                    if received_order.call == 0 || received_order.call == 1 || received_order.call == 2 { //hall order or cab idk
                         let mut found = false;
  
                         for (lid, local_orders) in local_msg.orders.iter_mut() {
