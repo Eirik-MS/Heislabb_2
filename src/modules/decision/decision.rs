@@ -625,20 +625,12 @@ impl Decision {
                     continue;
                 }
         
-                // Check if this confirmed order is *new* (not in the original broadcast)
-                let is_new = match old_orders_list {
-                    Some(old_orders) => !old_orders.contains(new_order),
-                    None => true,
-                };
-        
-                if is_new {
-                    println!(
-                        "Sending new confirmed order from elevator {}: floor {}, call {:?}",
-                        elevator_id, new_order.floor, new_order.call
-                    );
-                    self.elevator_assigned_orders_tx.send(new_order.clone()).await;
-                    self.orders_recived_confirmed_tx.send(new_order.clone()).await;
-                }
+                println!(
+                    "Sending new confirmed order from elevator {}: floor {}, call {:?}",
+                    elevator_id, new_order.floor, new_order.call
+                );
+                self.elevator_assigned_orders_tx.send(new_order.clone()).await;
+                self.orders_recived_confirmed_tx.send(new_order.clone()).await;
             }
         }
 
