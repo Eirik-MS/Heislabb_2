@@ -307,6 +307,7 @@ impl Decision {
                         if elev_id != &self.local_id {
                             local_broadcast.orders.insert(elev_id.clone(), orders.clone());
                         } else if elev_id == &self.local_id && !any_cab_orders { //add ,y own orders back
+                            println!("I lost my orders, inserting {:?}", orders.clone());
                             local_broadcast.orders.insert(elev_id.clone(), orders.clone()); //like backup + resend
                             if order.status == OrderStatus::Confirmed {
                                 println!("sending order {:?} with id {:?}", order.clone(), elev_id);
