@@ -158,8 +158,9 @@ impl Decision {
         
  
         if self.handle_barrier().await {
-            self.hall_order_assigner().await;
+           
         }
+        self.hall_order_assigner().await;
         
         // //braodcasting message
         let local_msg = self.local_broadcastmessage.read().await.clone();
@@ -307,8 +308,9 @@ impl Decision {
                         if elev_id != &self.local_id {
                             local_broadcast.orders.insert(elev_id.clone(), orders.clone());
                         } else if elev_id == &self.local_id && !any_cab_orders { //add ,y own orders back
-                            println!("I lost my orders, inserting {:?}", orders.clone());
-                            local_broadcast.orders.insert(elev_id.clone(), orders.clone()); //like backup + resend
+                            println!("I lost my orders, inserting {:?}", order.clone());
+                            local_broadcast.orders.entry(elev_id.clone()).or_insert_with(Vec::new).push(order.clone());
+            
                             if order.status == OrderStatus::Confirmed {
                                 println!("sending order {:?} with id {:?}", order.clone(), elev_id);
                                 self.orders_recived_confirmed_tx.send(order.clone()).await;
@@ -318,6 +320,8 @@ impl Decision {
                     }
                 }
             }
+
+
         }
  
         //3. handle hall order logic
@@ -556,15 +560,7 @@ impl Decision {
         let mut broadcast = self.local_broadcastmessage.write().await;
         let all_states = &broadcast.states;
         let mut new_orders: HashMap<String, Vec<Order>> = HashMap::new();
- 
-        /*
-            if state.direction != stop
-                state = moving
-            if state.dooropen
-                state dorropen
-            else idle
-        */
- 
+
  
         // 1. filter dead elevators
         
@@ -629,10 +625,11 @@ impl Decision {
             if *elevator_id != self.local_id {
                 continue;
             }
-        
+            
             let old_orders_list = broadcast.orders.get(elevator_id);
         
             for new_order in new_orders_list {
+                println!("order that might be send {:?}", new_order.clone());
                 // Only consider confirmed orders
                 if new_order.status != OrderStatus::Confirmed {
                     continue;
