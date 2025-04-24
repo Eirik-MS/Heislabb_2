@@ -22,7 +22,7 @@ use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
 
 const NUM_OF_FLOORS:u8 = 4;
-const UPDATE_INTERVAL:Duration = Duration::from_millis(10); //ms
+const UPDATE_INTERVAL:Duration = Duration::from_millis(100); //ms
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
