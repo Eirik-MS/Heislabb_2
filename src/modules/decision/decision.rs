@@ -86,7 +86,7 @@ impl Decision {
                     Some(order) => {
                         println!("New order received: {:?}", order);
                        self.handle_new_order(order).await;
-                       self.hall_order_assigner().await;
+                     // /  self.hall_order_assigner().await;
                        self.handle_barrier().await;
                     }
                     None => {
@@ -133,7 +133,7 @@ impl Decision {
                 match recvd_broadcast_message {
                     Some(recvd) => {
                         //println!("Received broadcast message in Decision: {:?}", recvd);
-                        self.hall_order_assigner().await;
+                       // / self.hall_order_assigner().await;
                         self.handle_recv_broadcast(recvd).await;
                         self.handle_barrier().await;
                         
@@ -386,7 +386,7 @@ impl Decision {
                                                 // println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
                                             }
                                             else if received_order.status == OrderStatus::Confirmed {
-                                                println!("Confirmed removing barrier {:?}", self.local_id.clone());
+                                               // println!("Confirmed removing barrier {:?}", self.local_id.clone());
                                                 local_order.status = OrderStatus::Confirmed; // TRUST
                                                 local_order.barrier.clear(); 
                                                // self.hall_order_assigner().await;
@@ -478,8 +478,8 @@ impl Decision {
                .map(|(id, _)| id.clone())
                .collect();
  
-            //   println!("alive elevs: {:?}", alive_elevators);
-            //   println!("dead elevs: {:?}", dead_elevators);
+        //    println!("alive elevs: {:?}", alive_elevators);
+        //    println!("dead elevs: {:?}", dead_elevators);
            let mut broadcast_msg = self.local_broadcastmessage.write().await;
            let source_id = broadcast_msg.source_id.clone();
            //println!("message: {:?}", broadcast_msg);
