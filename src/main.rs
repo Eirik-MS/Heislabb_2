@@ -27,7 +27,7 @@ const UPDATE_INTERVAL:Duration = Duration::from_millis(100); //ms
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     // Get the local IP address
-    let elevator_id: String = generateIDs().expect("Failed to generate ID");
+    let elevator_id: String = "1".to_string(); //generateIDs().expect("Failed to generate ID");
     println!("Elevator ID: {}", elevator_id);
 
     // Create a dummy state to initialize the watch channel propperly
