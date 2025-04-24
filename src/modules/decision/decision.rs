@@ -486,7 +486,7 @@ impl Decision {
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); 
                        status_changed = true;
-                       println!("gen sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
+                    //   println!("gen sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
                     //    if self.local_id == *_elev_id {
                     //     println!("sending order {:?} with id {:?}", order.clone(), source_id);
                     //     self.elevator_assigned_orders_tx.send(order.clone()).await;
@@ -621,7 +621,7 @@ impl Decision {
         
             for new_order in new_orders_list {
                 // Only consider confirmed orders
-                if new_order.status != OrderStatus::Confirmed {
+                if new_order.status != OrderStatus::Confirmed || new_order.call == 2 {
                     continue;
                 }
         
