@@ -402,6 +402,7 @@ impl Decision {
 
                                                 // println!("local order: {:#?} belongs to {:?}", local_order, lid);
                                                 // println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
+                                            }
                                         }
                                     }
                                 }
