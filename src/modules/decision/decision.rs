@@ -439,7 +439,7 @@ impl Decision {
                     }
                 }
             }
-            println!("New local broadcast message {:#?}", local_msg);
+            //println!("New local broadcast message {:#?}", local_msg);
  
             for (id, state) in recvd.states { //merging
                 local_msg.states.insert(id, state);
