@@ -254,6 +254,7 @@ impl ElevatorController {
                                     let _ = self.door_closing_tx.send(true).await;
                                 } else {
                                     state_lock.door_open = false; // Door closed
+                                    self.remove_order(state_lock.current_floor).await;
                                     self.elevator.door_light(false);
                                     println!("Door has closed.");
                                 }
