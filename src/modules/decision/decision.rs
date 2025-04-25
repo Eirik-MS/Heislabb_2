@@ -495,7 +495,7 @@ impl Decision {
  
                    } 
                    //println!("modyfing my CAB orders if recv id {:?} matches my id {:?}",*_elev_id, self.local_id);
-                   if order.status == OrderStatus::Requested && order.call == 2 && *_elev_id == self.local_id{
+                   if order.status == OrderStatus::Requested && order.call == 2 && *_elev_id == self.local_id && alive_elevators.is_subset(&order.barrier){
                        println!("CAB order, setting to confirmed.");
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); // anyway
