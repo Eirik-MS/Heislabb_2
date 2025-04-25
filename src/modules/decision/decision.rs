@@ -134,6 +134,7 @@ impl Decision {
                         println!("Received broadcast message in Decision: {:#?}", recvd);
                         
                         self.handle_recv_broadcast(recvd).await;
+                        self.hall_order_assigner().await;
 
                     }
                     None => {
