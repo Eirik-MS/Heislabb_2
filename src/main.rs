@@ -49,7 +49,7 @@ async fn main() -> std::io::Result<()> {
     let (orders_confirmed_tx, orders_confirmed_rx) = mpsc::channel(100);
 
     // Setup network channels 
-    let (decision_to_network_tx, decision_to_network_rx) = mpsc::channel(100);
+    let (decision_to_network_tx, decision_to_network_rx) = watch::channel(BroadcastMessage::new(0));
     let (network_to_decision_tx, network_to_decision_rx) = mpsc::channel(100);
     let (network_alive_tx, network_alive_rx) = mpsc::channel(100);
 

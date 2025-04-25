@@ -1,6 +1,7 @@
 
 use crate::modules::common::*;
 use tokio::sync::mpsc::{Sender, Receiver};
+use tokio::sync::watch;
 use core::net;
 use std::net::{Ipv4Addr,SocketAddrV4};
 use serde_json;
@@ -29,31 +30,30 @@ pub fn generateIDs() -> Option<String>{
     //println!("Local IP: {}", ip);
     let id = md5::compute(ip);
     Some(format!("{:x}", id));
-    return Some("1".to_string());
+    return Some("2".to_string());
 }
 
 
 pub async fn network_sender(
     socket: UdpSocket,
-    mut decision_to_network_rx: Receiver<BroadcastMessage>,
-){
+    mut decision_to_network_rx: watch::Receiver<BroadcastMessage>,
+) {
     loop {
-        match decision_to_network_rx.recv().await {
-            Some(message) => {
-               // println!("Sending message");
-                //socket.set_broadcast(true).expect("Failed to enable UDP broadcast");
-
-                let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30029);
-                let serMessage = serde_json::to_string(&message).expect("Failed to serialize message");
-
-                socket.send_to(serMessage.as_bytes(), broadcast_addr).await.expect("Failed to broadcast message on port");
-            }
-            None => {
-                println!("Channel closed; no message received.");
-                // Optionally, break or continue
-                break;
-            }
+        // Wait for a new value
+        if decision_to_network_rx.changed().await.is_err() {
+            println!("Channel closed; exiting.");
+            break;
         }
+
+        let message = decision_to_network_rx.borrow().clone();
+        println!("Sending message: {:#?}", message);
+
+        let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30029);
+        let ser_message = serde_json::to_string(&message).expect("Failed to serialize message");
+
+        socket.send_to(ser_message.as_bytes(), broadcast_addr)
+            .await
+            .expect("Failed to broadcast message on port");
     }
 }
 

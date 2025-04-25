@@ -30,7 +30,7 @@ pub struct Decision {
     local_broadcastmessage: Arc<RwLock<BroadcastMessage>>, // everything locally sent as heartbeat
     dead_elev: Arc<Mutex<std::collections::HashMap<String, bool>>>,
     //NETWORK CBC
-    network_elev_info_tx: mpsc::Sender<BroadcastMessage>,
+    network_elev_info_tx: watch::Sender<BroadcastMessage>,
     network_elev_info_rx: mpsc::Receiver<BroadcastMessage>,
     network_alivedead_rx: mpsc::Receiver<AliveDeadInfo>,
     //OTEHRS/UNSURE
@@ -45,7 +45,7 @@ impl Decision {
     pub fn new(
         local_id: String,
  
-        network_elev_info_tx: mpsc::Sender<BroadcastMessage>,
+        network_elev_info_tx: watch::Sender<BroadcastMessage>,
         network_elev_info_rx: mpsc::Receiver<BroadcastMessage>,
         network_alivedead_rx: mpsc::Receiver<AliveDeadInfo>,
  
@@ -170,10 +170,11 @@ impl Decision {
         
         // //braodcasting message
         let local_msg = self.local_broadcastmessage.read().await.clone();
-        if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
+        //println!("sent local broadcastmessage is {:#?}\n", local_msg);
+        if let Err(e) = self.network_elev_info_tx.send(local_msg) {
             eprintln!("Failed to send message: {:?}", e);
         }
-        //println!("sent local broadcastmessage is {:#?}\n", self.local_broadcastmessage);
+        
  
     }
  
