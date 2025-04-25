@@ -335,7 +335,7 @@ impl Decision {
             let mut local_msg = self.local_broadcastmessage.write().await;
             let source_id = local_msg.source_id.clone();
             println!("received broadcast message {:#?}", recvd);
-            println!("local broadcast message {:#?}", local_msg);
+          //  println!("local broadcast message {:#?}", local_msg);
             for (elev_id, received_orders) in &recvd.orders {
                 for mut received_order in received_orders {
                     if received_order.call == 0 || received_order.call == 1 || received_order.call == 2 { //hall order or cab idk
@@ -449,7 +449,7 @@ impl Decision {
                     }
                 }
             }
-            //println!("New local broadcast message {:#?}", local_msg);
+            println!("Updated local broadcast message {:#?}", local_msg);
  
             for (id, state) in recvd.states { //merging
                 local_msg.states.insert(id, state);
