@@ -673,7 +673,7 @@ impl Decision {
         let floor_diff = (state.current_floor as i32 - order.floor as i32).abs() as u32;
         let direction_match = (order.call == 0 && state.current_direction == 0)
             || (order.call == 1 && state.current_direction == 1);
-        let direction_penalty = if direction_match { 0 } else { 5 };
+        let direction_penalty = if direction_match { 0 } else { 1 };
     
         floor_diff + direction_penalty
     }
