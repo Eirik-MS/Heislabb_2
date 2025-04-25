@@ -10,6 +10,7 @@ pub const NUM_OF_FLOORS:u8 = 4;
 pub const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 
 
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
 pub struct ElevatorState {
     pub current_floor: u8,
@@ -48,7 +49,7 @@ pub struct BroadcastMessage {
 
 impl BroadcastMessage {
     pub fn new(version: u64) -> Self {
-        let source_id = generateIDs().expect("Failed to generate source ID");
+        let source_id = generateIDs().expect("Failed to generate ID");
         
         BroadcastMessage {
             source_id,

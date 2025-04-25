@@ -28,7 +28,8 @@ pub fn generateIDs() -> Option<String>{
     let ip = get_ip().expect("Failed to get local IP");
     //println!("Local IP: {}", ip);
     let id = md5::compute(ip);
-    Some(format!("{:x}", id))
+    Some(format!("{:x}", id));
+    return Some("1".to_string());
 }
 
 
