@@ -614,6 +614,7 @@ impl Decision {
         // 3. assign orders based on cost
         for order in hall_orders {
             let mut best_cost = u32::MAX;
+            let mut lowest_id = u32::MAX;
             let mut best_elev: Option<&String> = None;
  
             for elev_id in &alive_elevators {
