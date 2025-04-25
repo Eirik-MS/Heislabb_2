@@ -131,7 +131,7 @@ impl Decision {
                // println!("Waiting for broadcast message");
                 match recvd_broadcast_message {
                     Some(recvd) => {
-                        println!("Received broadcast message in Decision: {:#?}", recvd);
+                        //println!("Received broadcast message in Decision: {:#?}", recvd);
                         
                         self.handle_recv_broadcast(recvd).await;
                         self.hall_order_assigner().await;
@@ -167,7 +167,7 @@ impl Decision {
         if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
             eprintln!("Failed to send message: {:?}", e);
         }
-        println!("local_broadcastmessage is {:#?}\n", self.local_broadcastmessage);
+        //println!("sent local broadcastmessage is {:#?}\n", self.local_broadcastmessage);
  
     }
  
@@ -327,7 +327,8 @@ impl Decision {
         {
             let mut local_msg = self.local_broadcastmessage.write().await;
             let source_id = local_msg.source_id.clone();
-            //let recv_id = recvd.source_id.clone();
+            println!("received broadcast message {:#?}", recvd);
+            println!("local broadcast message {:#?}", local_msg);
             for (elev_id, received_orders) in &recvd.orders {
                 for received_order in received_orders {
                     if received_order.call == 0 || received_order.call == 1 || received_order.call == 2 { //hall order or cab idk
