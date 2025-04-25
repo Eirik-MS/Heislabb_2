@@ -422,9 +422,11 @@ impl Decision {
                                     }
                                     if (received_order.status == OrderStatus::Requested) {
                                         local_order.barrier.insert(recvd.source_id.clone());
+                                        local_order.barrier.insert(self.local_id.clone());
                                     }
                                     else if (received_order.status == OrderStatus::Completed) {
                                         local_order.barrier.insert(recvd.source_id.clone());
+                                        local_order.barrier.insert(self.local_id.clone());
                                     }
                                 }
                             }
