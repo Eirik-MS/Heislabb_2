@@ -84,7 +84,7 @@ impl Decision {
             new_order = self.new_order_rx.recv() => {
                 match new_order {
                     Some(order) => {
-                        println!("New order received: {:?}", order);
+                       
                        self.handle_new_order(order).await;
                        self.hall_order_assigner().await;
                     }
@@ -370,7 +370,7 @@ impl Decision {
                                                 local_order.status = OrderStatus::Confirmed; // TRUST
                                                 local_order.barrier.clear(); 
                                             } else if received_order.status == OrderStatus::Completed {
-                                                local_order.status = OrderStatus::Confirmed; 
+                                                local_order.status = OrderStatus::Completed; 
                                                 local_order.barrier.insert(recvd.source_id.clone());
                                                 local_order.barrier.insert(self.local_id.clone());
                                             } 
@@ -398,7 +398,7 @@ impl Decision {
                                             // }
                                         }
                                         OrderStatus::Completed => {
-                                            if received_order.status == OrderStatus::Completed {
+                                            if received_order.status == OrderStatus::Noorder {
                                                 local_order.status = OrderStatus::Noorder; //TRUST
                                             } else {
                                                 // println!("cCOMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
@@ -425,7 +425,7 @@ impl Decision {
                     }
                 }
             }
-            //println!("received message: {:#?}", recvd);
+            println!("New local broadcast message {:#?}", local_msg);
  
             for (id, state) in recvd.states { //merging
                 local_msg.states.insert(id, state);
