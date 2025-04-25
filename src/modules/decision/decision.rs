@@ -347,7 +347,7 @@ impl Decision {
                                     && local_order.call == received_order.call
                                 {
                                     found = true;
-                                    if local_order.call == 1 || local_order.call == 0 { //status is changed only fro HALL orders
+                                    if local_order.call == 1 || local_order.call == 0 || (local_order.call == 2 && *lid != source_id) { //status is changed only fro HALL orders
                                     match local_order.status {
                                         OrderStatus::Noorder => {
                                             if received_order.status == OrderStatus::Requested {
