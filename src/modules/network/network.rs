@@ -30,7 +30,7 @@ pub fn generateIDs() -> Option<String>{
     //println!("Local IP: {}", ip);
     let id = md5::compute(ip);
     Some(format!("{:x}", id));
-    return Some("2".to_string());
+    return Some("1".to_string());
 }
 
 

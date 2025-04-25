@@ -347,7 +347,7 @@ impl Decision {
                                     && local_order.call == received_order.call
                                 {
                                     found = true;
- 
+                                    if local_order.call == 1 || local_order.call == 0 { //status is changed only fro HALL orders
                                     match local_order.status {
                                         OrderStatus::Noorder => {
                                             if received_order.status == OrderStatus::Requested {
@@ -418,6 +418,13 @@ impl Decision {
                                                 local_order.barrier.insert(self.local_id.clone());
                                             }
                                         }
+                                    }
+                                    }
+                                    if (received_order.status == OrderStatus::Requested) {
+                                        local_order.barrier.insert(recvd.source_id.clone());
+                                    }
+                                    else if (received_order.status == OrderStatus::Completed) {
+                                        local_order.barrier.insert(recvd.source_id.clone());
                                     }
                                 }
                             }
@@ -593,7 +600,7 @@ impl Decision {
         }
  
  
-        // 2. collecting all hall orders
+        // 2. collecting all orders
         let mut hall_orders: Vec<Order> = vec![];
         for (_id, orders) in &broadcast.orders {
             for order in orders {
@@ -615,7 +622,9 @@ impl Decision {
                         best_cost = cost;
                         best_elev = Some(elev_id);
                     }
+                    println!("cost for {:?} is {:?}", elev_id, cost);
                 }
+
             }
             println!("order {:?} assigned to elevator {:?}", order, best_elev);
             if let Some(best_id) = best_elev {
@@ -655,7 +664,7 @@ impl Decision {
 
         broadcast.orders = new_orders;
        // println!("Hall order assigner finished.");
-     // println!("message: {:#?}", broadcast);
+      //println!("my local message: {:#?}", broadcast);
  
     }
  
