@@ -623,16 +623,10 @@ impl Decision {
                 // Only consider confirmed and requested orders
                 if new_order.status == OrderStatus::Confirmed {
                     println!(
-                        "Sending new confirmed order from elevator {}: floor {}, call {:?}",
+                        "Sending new confirmed order to elevator {}: floor {}, call {:?}",
                         elevator_id, new_order.floor, new_order.call
                     );
                     self.orders_recived_confirmed_tx.send(new_order.clone()).await;
-                }
-                else if new_order.status == OrderStatus::Requested {
-                    println!(
-                        "Sending new requested order from elevator {}: floor {}, call {:?}",
-                        elevator_id, new_order.floor, new_order.call
-                    );
                     self.elevator_assigned_orders_tx.send(new_order.clone()).await;
                 }
             }
