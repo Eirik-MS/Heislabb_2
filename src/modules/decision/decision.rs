@@ -337,7 +337,7 @@ impl Decision {
             println!("received broadcast message {:#?}", recvd);
             println!("local broadcast message {:#?}", local_msg);
             for (elev_id, received_orders) in &recvd.orders {
-                for received_order in received_orders {
+                for mut received_order in received_orders {
                     if received_order.call == 0 || received_order.call == 1 || received_order.call == 2 { //hall order or cab idk
                         let mut found = false;
  
@@ -424,9 +424,16 @@ impl Decision {
  
                         if !found {
                             println!("Recvd unexisting order {:?} with id {:?}", received_order, elev_id);
+                            let mut order = received_order.clone();
+                            if order.status == OrderStatus::Completed {
+                                order.barrier.insert(self.local_id.clone());
+                            } else if order.status == OrderStatus::Completed{
+                                order.barrier.insert(self.local_id.clone());
+                            }
                             local_msg.orders.entry(elev_id.clone())
                                 .or_insert_with(Vec::new)
-                                .push(received_order.clone());
+                                .push(order);
+                            
                         }
  
                     }
