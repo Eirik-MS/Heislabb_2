@@ -86,6 +86,7 @@ impl Decision {
                     Some(order) => {
                         println!("New order received: {:?}", order);
                        self.handle_new_order(order).await;
+                       self.hall_order_assigner().await;
                     }
                     None => {
                         println!("new_order_rx channel closed.");
@@ -130,7 +131,7 @@ impl Decision {
                // println!("Waiting for broadcast message");
                 match recvd_broadcast_message {
                     Some(recvd) => {
-                        //println!("Received broadcast message in Decision: {:?}", recvd);
+                        println!("Received broadcast message in Decision: {:#?}", recvd);
                         
                         self.handle_recv_broadcast(recvd).await;
 
@@ -157,9 +158,7 @@ impl Decision {
         }
         
  
-        if self.handle_barrier().await {
-           
-        }
+        self.handle_barrier().await;
         self.hall_order_assigner().await;
         
         // //braodcasting message
@@ -167,7 +166,7 @@ impl Decision {
         if let Err(e) = self.network_elev_info_tx.send(local_msg).await {
             eprintln!("Failed to send message: {:?}", e);
         }
-      //  println!("local_broadcastmessage is {:?}\n", self.local_broadcastmessage);
+        println!("local_broadcastmessage is {:#?}\n", self.local_broadcastmessage);
  
     }
  
@@ -619,24 +618,28 @@ impl Decision {
             let old_orders_list = broadcast.orders.get(elevator_id);
         
             for new_order in new_orders_list {
-                // Only consider confirmed orders
-                if new_order.status != OrderStatus::Confirmed {
-                    continue;
+                // Only consider confirmed and requested orders
+                if new_order.status == OrderStatus::Confirmed {
+                    println!(
+                        "Sending new confirmed order from elevator {}: floor {}, call {:?}",
+                        elevator_id, new_order.floor, new_order.call
+                    );
+                    self.orders_recived_confirmed_tx.send(new_order.clone()).await;
                 }
-        
-                println!(
-                    "Sending new confirmed order from elevator {}: floor {}, call {:?}",
-                    elevator_id, new_order.floor, new_order.call
-                );
-                self.elevator_assigned_orders_tx.send(new_order.clone()).await;
-                self.orders_recived_confirmed_tx.send(new_order.clone()).await;
+                else if new_order.status == OrderStatus::Requested {
+                    println!(
+                        "Sending new requested order from elevator {}: floor {}, call {:?}",
+                        elevator_id, new_order.floor, new_order.call
+                    );
+                    self.elevator_assigned_orders_tx.send(new_order.clone()).await;
+                }
             }
         }
 
 
         broadcast.orders = new_orders;
        // println!("Hall order assigner finished.");
-      println!("message: {:#?}", broadcast);
+     // println!("message: {:#?}", broadcast);
  
     }
  
