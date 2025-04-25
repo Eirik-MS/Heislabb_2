@@ -134,6 +134,12 @@ impl Decision {
                         //println!("Received broadcast message in Decision: {:#?}", recvd);
                         
                         self.handle_recv_broadcast(recvd).await;
+
+                        // Drain the rest (non-blocking)
+                        while let Ok(next_msg) = self.network_elev_info_rx.try_recv() {
+                            self.handle_recv_broadcast(next_msg).await;
+                        }
+
                         self.hall_order_assigner().await;
 
                     }
