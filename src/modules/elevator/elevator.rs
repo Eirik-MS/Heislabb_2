@@ -99,6 +99,15 @@ impl ElevatorController {
 
         println!("Elevator started:\n{:#?}", controller.elevator.clone());
 
+        //Tur off all ligths when elevator starts:
+        for i in 0..elev_num_floors {
+            for j in 0..3 {
+                controller.elevator.call_button_light(i, j, false);
+            }
+        }
+        //Turn off the door light
+        controller.elevator.door_light(false);
+
         {
             let elevator = controller.elevator.clone();
             let call_button_tx = controller.call_btn_tx.clone();
