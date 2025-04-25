@@ -46,7 +46,7 @@ pub async fn network_sender(
         }
 
         let message = decision_to_network_rx.borrow().clone();
-        println!("Sending message: {:#?}", message);
+        //println!("Sending message: {:#?}", message);
 
         let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30029);
         let ser_message = serde_json::to_string(&message).expect("Failed to serialize message");

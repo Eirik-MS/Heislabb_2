@@ -273,7 +273,7 @@ impl Decision {
                 }
             }
         }
-        println!("Current broadcast message after order handling: {:#?}", *broadcast_message);
+        //println!("Current broadcast message after order handling: {:#?}", *broadcast_message);
     }
  
     async fn handle_recv_broadcast(&self, recvd: BroadcastMessage) {
@@ -543,7 +543,7 @@ impl Decision {
                .filter(|(_, &is_alive)| !is_alive)
                .map(|(id, _)| id.clone())
                .collect();
-            println!("alive elevs: {:?}", alive_elevators);
+            
            //check if we can move from finished to NoOrder, clean barrier
            for (_elev_id, orders) in &mut broadcast_msg.orders {
                for order in orders.iter_mut() {
@@ -617,7 +617,7 @@ impl Decision {
                     }
                 }
             }
- 
+            println!("order {:?} assigned to elevator {:?}", order, best_elev);
             if let Some(best_id) = best_elev {
                 new_orders.entry(best_id.clone()).or_default().push(order);
             }
@@ -645,10 +645,7 @@ impl Decision {
             for new_order in new_orders_list {
                 // Only consider confirmed and requested orders
                 if new_order.status == OrderStatus::Confirmed {
-                    println!(
-                        "Sending new confirmed order to elevator {}: floor {}, call {:?}",
-                        elevator_id, new_order.floor, new_order.call
-                    );
+                    //println!("Sending new confirmed order to elevator {}: floor {}, call {:?}",elevator_id, new_order.floor, new_order.call);
                     self.orders_recived_confirmed_tx.send(new_order.clone()).await;
                     self.elevator_assigned_orders_tx.send(new_order.clone()).await;
                 }
