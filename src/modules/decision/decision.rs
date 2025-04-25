@@ -424,6 +424,9 @@ impl Decision {
                                         local_order.barrier.insert(recvd.source_id.clone());
                                         local_order.barrier.insert(self.local_id.clone());
                                     }
+                                    else {
+                                        local_order.barrier.clear(); 
+                                    }
                                 }
                             }
                         }
