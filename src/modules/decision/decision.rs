@@ -266,14 +266,14 @@ impl Decision {
                 if order.floor == completed_floor { // everything for this floor
                     if order.status == OrderStatus::Confirmed { //change status if confirmed to finished
                         order.status = OrderStatus::Completed;
-                        println!("confirmed orders now completed: {:?}", order);
                         order.barrier.clear(); //clear barrier just in case
                         order.barrier.insert(self.local_id.clone());
+                        println!("confirmed orders now completed: {:?}", order);
                     }
                 }
             }
         }
-        //println!("Current broadcast message: {:?}", *broadcast_message);
+        println!("Current broadcast message after order handling: {:#?}", *broadcast_message);
     }
  
     async fn handle_recv_broadcast(&self, recvd: BroadcastMessage) {
@@ -409,6 +409,7 @@ impl Decision {
                                         OrderStatus::Completed => {
                                             if received_order.status == OrderStatus::Noorder {
                                                 local_order.status = OrderStatus::Noorder; //TRUST
+                                                println!("NOORDER State change");
                                             } else {
                                                 // println!("cCOMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
                                                 if (received_order.status == OrderStatus::Completed) {
@@ -542,22 +543,24 @@ impl Decision {
                .filter(|(_, &is_alive)| !is_alive)
                .map(|(id, _)| id.clone())
                .collect();
-       
+            println!("alive elevs: {:?}", alive_elevators);
            //check if we can move from finished to NoOrder, clean barrier
            for (_elev_id, orders) in &mut broadcast_msg.orders {
                for order in orders.iter_mut() {
                 
                 if order.status == OrderStatus::Completed && alive_elevators.is_subset(&order.barrier) {
+                    println!("changing status from completed to Noorder");
                     order.status = OrderStatus::Noorder;
                     order.barrier.clear();
                 }
                 //println!("modyfing my CAB orders if recv id {:?} matches my id {:?}",*_elev_id, self.local_id);
-                if *_elev_id == self.local_id { //modify my cab orders only
-                    if order.status == OrderStatus::Completed && order.call == 2 {
-                        order.status = OrderStatus::Noorder;
-                        order.barrier.clear();
-                    }
-                }
+                //if *_elev_id == self.local_id { //modify my cab orders only
+                //    if order.status == OrderStatus::Completed && order.call == 2 {
+                //        order.status = OrderStatus::Noorder;
+                //        println!("NOORDER State change IN CAB ORDER");
+                //        order.barrier.clear();
+                //    }
+                //}
                }
            }
        }

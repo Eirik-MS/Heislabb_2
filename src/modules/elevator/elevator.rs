@@ -268,7 +268,12 @@ impl ElevatorController {
                 reciving_order = elevator_assigned_orders_guard.recv() => {
                     match reciving_order {
                         Some(order) => {
+                            println!("Elevator assigned order: {:#?}", order);
                             self.add_order(order).await;
+                            //Empty the queue
+                            while let Ok(next_order) = elevator_assigned_orders_guard.try_recv() {
+                                self.add_order(next_order).await;
+                            }
                         }
                         None => {
                             //println!("elevator_assigned_orders_rx channel closed.");
@@ -356,7 +361,7 @@ impl ElevatorController {
     pub async fn add_order(&self, order: Order) {
         let mut queue = self.queue.write().await;
         queue.push(order);
-        println!("Order added to queue.");
+        //println!("Order added to queue.");
     }
 
     //Remove orders from the queue by only keeping the orders that does NOT match the floor given.
