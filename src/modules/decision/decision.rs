@@ -718,12 +718,39 @@ impl Decision {
             }
         }
         
+
+
+
+        for (elev_id, received_orders) in &broadcast.orders {
+            for mut received_order in received_orders {
+                    
+                for (lid, local_orders) in new_orders.iter_mut() {
+                    for local_order in local_orders.iter_mut() {
+                        if local_order.floor == received_order.floor //find unique hall order
+                            && local_order.call == received_order.call
+                        {
+                            
+                            if (local_order.status == OrderStatus::Requested) {
+                                println!("attaching barriers {:?}, {:?}, {:?}", received_order.barrier.clone(), broadcast.source_id.clone(), self.local_id.clone());
+                                local_order.barrier = received_order.barrier.clone(); //maintain barrier
+                            } else if local_order.status == OrderStatus::Completed{
+                                println!("attaching barriers  {:?}, {:?}, {:?}", received_order.barrier.clone(), broadcast.source_id.clone(), self.local_id.clone());
+                                local_order.barrier = received_order.barrier.clone();
+                            }
+                            else {
+                                local_order.barrier.clear(); 
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         for (elevator_id, orders) in new_orders {
             for order in orders {
                 broadcast.orders.entry(elevator_id.clone()).or_default().push(order);
             }
         }
- 
         // send order one by one to ELEVator        
         for (elevator_id, new_orders_list) in &broadcast.orders {
             // Only process orders for the local elevator
