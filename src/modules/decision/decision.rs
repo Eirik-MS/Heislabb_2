@@ -675,7 +675,8 @@ impl Decision {
         let direction_match = (order.call == 0 && state.current_direction == 0)
             || (order.call == 1 && state.current_direction == 1);
         let direction_penalty = if direction_match { 0 } else { 1 };
-    
-        floor_diff + direction_penalty
+        print!("floor_diff {:?} direction_penalty {:?} ", floor_diff*2, direction_penalty);
+        floor_diff*2 + direction_penalty
+       
     }
 }
