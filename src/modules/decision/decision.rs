@@ -421,6 +421,7 @@ impl Decision {
                                     }
                                     }
                                     if (local_order.status == OrderStatus::Requested || local_order.status == OrderStatus::Completed) {
+                                        local_order.barrier = received_order.barrier.clone(); //maintain barrier
                                         local_order.barrier.insert(recvd.source_id.clone());
                                         local_order.barrier.insert(self.local_id.clone());
                                     }
