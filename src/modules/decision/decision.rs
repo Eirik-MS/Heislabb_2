@@ -616,18 +616,23 @@ impl Decision {
             let mut best_cost = u32::MAX;
             let mut lowest_id = u32::MAX;
             let mut best_elev: Option<&String> = None;
- 
+        
             for elev_id in &alive_elevators {
                 if let Some(state) = all_states.get(*elev_id) {
                     let cost = Self::cost_fn(state, &order);
-                    if cost < best_cost {
+                    let elev_id_int: u32 = elev_id.parse().expect("not number or similar issues");
+        
+                    // Combine the cost and ID logic
+                    if cost < best_cost || (cost == best_cost && elev_id_int < lowest_id) {
                         best_cost = cost;
+                        lowest_id = elev_id_int;
                         best_elev = Some(elev_id);
                     }
+        
                     println!("cost for {:?} is {:?}", elev_id, cost);
                 }
-
             }
+        
             println!("order {:?} assigned to elevator {:?}", order, best_elev);
             if let Some(best_id) = best_elev {
                 new_orders.entry(best_id.clone()).or_default().push(order);
