@@ -590,77 +590,142 @@ impl Decision {
     }
  
     pub async fn hall_order_assigner(& self) {
-        // Take current HALL orders and reassign them based on cost function
-        //
-        //println!("Started Hall order assigning.");
         let mut broadcast = self.local_broadcastmessage.write().await;
-        let all_states = &broadcast.states;
+        println!("Broadcast message: {:?}", *broadcast);
+        let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
+        let mut states = std::collections::HashMap::new();
+        //println!("Temp created.");
+        //1.1 map hall orders
+        for orders in broadcast.orders.values() {
+            for order in orders {
+                if order.status == OrderStatus::Confirmed && order.call < 2 {
+                    hall_requests[(order.floor) as usize][order.call as usize] = true;
+                }
+            }
+        }
+
+        /*
+            if state.direction != stop 
+                state = moving
+            if state.dooropen 
+                state dorropen
+            else idle
+        */
+        //println!("Check other elevators");
+        for (id, state) in &broadcast.states {
+            //println!("Checking elevator: {}", id);
+            let dead_elevators = self.dead_elev.lock().await;  
+            if let Some(true) = dead_elevators.get(id) {
+                println!("Elevator {} is dead, skipping.", id);
+                continue;
+            }
+            println!("Elevator {} is alive.", id);
+            let cab_requests: Vec<bool> = (1..=MAX_FLOORS) 
+            .map(|floor| {
+                broadcast.orders.values().any(|orders| {
+                    orders.iter().any(|order| {
+                        order.floor as usize == floor && order.call == 2 && order.status == OrderStatus::Confirmed
+                    })
+                })
+            })
+            .collect();
+            //println!("Cab requests: {:?}", cab_requests);
+        
+            let behaviour = if state.door_open {
+                "doorOpen"
+            } else if state.current_direction != e::DIRN_STOP { 
+                "moving"
+            } else {
+                "idle"
+            };
+        
+            states.insert(id.clone(), serde_json::json!({
+                "behaviour": behaviour,
+                "floor": state.current_floor,
+                "direction": match state.current_direction {
+                    e::DIRN_DOWN => "down",
+                    e::DIRN_UP => "up",
+                    _ => "stop",
+                },
+                "cabRequests": cab_requests
+            }));
+        }
+
+        //1.3 create merged json
+        let input_json = serde_json::json!({
+            "hallRequests": hall_requests,
+            "states": states
+        }).to_string();
+        
+        println!("{}", serde_json::to_string_pretty(&input_json).unwrap());
+
+        //2. use hall order assigner
+        let hra_output = Command::new("./hall_request_assigner")
+        .arg("--input")
+        .arg(&input_json)
+        .output()
+        .expect("Failed to execute hall_request_assigner");
+
+        let hra_output_str : String;
         let mut new_orders: HashMap<String, Vec<Order>> = HashMap::new();
 
- 
-        // 1. filter dead elevators
-        
-        let mut dead_elev = self.dead_elev.lock().await;
-        if !dead_elev.contains_key(&self.local_id) {
-            dead_elev.insert(self.local_id.clone(), false); // Local id starts as alive (true)
-        }
-        let alive_elevators: Vec<_> = all_states
-            .keys()
-            .filter(|id| !dead_elev.get(*id).copied().unwrap_or(false))
-            .collect();
- 
-        if alive_elevators.is_empty() {
-            println!("No alive elevators found. Skipping reassignment.");
-            return;
-        }
- 
- 
-        // 2. collecting all orders
-        let mut hall_orders: Vec<Order> = vec![];
-        for (_id, orders) in &broadcast.orders {
-            for order in orders {
-                if (order.call == 0 || order.call == 1){
-                    hall_orders.push(order.clone());
-                }
-            }
-        }
- 
-        // 3. assign orders based on cost
-        for order in hall_orders {
-            let mut best_cost = u32::MAX;
-            let mut best_elev: Option<&String> = None;
-        
-            for &elev_id in &alive_elevators {
-                if let Some(state) = all_states.get(elev_id) {
-                    let cost = Self::cost_fn(state, &order);
+        if hra_output.status.success() {
+            let hra_output_str = String::from_utf8(hra_output.stdout)
+                .expect("Invalid UTF-8 hra_output");
             
-                    if cost < best_cost {
-                        best_cost = cost;
-                        best_elev = Some(elev_id);
-                    }
-            
-                    println!("cost for {:?} is {:?}", elev_id, cost);
-                }
-            }
+            let hra_output: HashMap<String, Vec<Vec<bool>>> = serde_json::from_str(&hra_output_str)
+                .expect("Failed to deserialize hra_output");
         
-            println!("order {:?} assigned to elevator {:?}", order, best_elev);
-            if let Some(best_id) = best_elev {
-                new_orders.entry(best_id.clone()).or_default().push(order);
+            for (elev_id, floors) in &hra_output {
+                println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
             }
-        }
-        //add existing cab orders
-        for (elev_id, orders) in &broadcast.orders {
-            for order in orders {
-                if order.call == 2 {
-                    new_orders.entry(elev_id.clone()).or_default().push(order.clone());
-                }
-            }
-        }
- 
 
+            // 3. update local broadcast message according to the return value of executable - hra_output
+            for (new_elevator_id, orders) in hra_output.iter() {
+                for (floor_index, buttons) in orders.iter().enumerate() {
+                    let floor = (floor_index) as u8; 
+                    for (call_type, &is_confirmed) in buttons.iter().enumerate() { //call type can only be either 0 or 1 (up, down)
+                        if is_confirmed { //true e. i. there is an order
+                            let call = call_type as u8; 
+    
+                            let mut found_order: Option<Order> = None;
+                            let mut previous_elevator_id: Option<String> = None;
+    
+                            for (elevator_id, orders) in broadcast.orders.iter_mut() {
+                                if let Some(order) = orders.iter_mut().find(|order| order.floor == floor && order.call == call) {
+                                    found_order = Some(order.clone());
+                                    previous_elevator_id = Some(elevator_id.clone());
+                                    break;
+                                }
+                            }
+            
+                            if let Some(order) = found_order {
+                                if let Some(prev_id) = previous_elevator_id {
+                                    if let Some(prev_orders) = broadcast.orders.get_mut(&prev_id) {
+                                        if let Some(pos) = prev_orders.iter().position(|x| x == &order) {
+                                            prev_orders.remove(pos);
+                                        }
+                                    }
+                                }
+            
+                                new_orders.entry(new_elevator_id.clone())
+                                    .or_default()
+                                    .push(order);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        for (elevator_id, orders) in new_orders {
+            for order in orders {
+                broadcast.orders.entry(elevator_id.clone()).or_default().push(order);
+            }
+        }
  
         // send order one by one to ELEVator        
-        for (elevator_id, new_orders_list) in &new_orders {
+        for (elevator_id, new_orders_list) in &broadcast.orders {
             // Only process orders for the local elevator
             if *elevator_id != self.local_id {
                 continue;
@@ -679,9 +744,9 @@ impl Decision {
         }
 
 
-        broadcast.orders = new_orders;
+       // broadcast.orders = new_orders;
        // println!("Hall order assigner finished.");
-      //println!("my local message: {:#?}", broadcast);
+      println!("my local message: {:#?}", broadcast);
  
     }
  
