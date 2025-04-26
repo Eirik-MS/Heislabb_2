@@ -628,21 +628,17 @@ impl Decision {
         // 3. assign orders based on cost
         for order in hall_orders {
             let mut best_cost = u32::MAX;
-            let mut lowest_id = u32::MAX;
             let mut best_elev: Option<&String> = None;
         
-            for elev_id in &alive_elevators {
-                if let Some(state) = all_states.get(*elev_id) {
+            for &elev_id in &alive_elevators {
+                if let Some(state) = all_states.get(elev_id) {
                     let cost = Self::cost_fn(state, &order);
-                    let elev_id_int: u32 = elev_id.parse().expect("not number or similar issues");
-        
-                    // Combine the cost and ID logic
-                    if cost < best_cost || (cost == best_cost && elev_id_int < lowest_id) {
+            
+                    if cost < best_cost || (cost == best_cost && best_elev.map_or(true, |id| elev_id < id)) {
                         best_cost = cost;
-                        lowest_id = elev_id_int;
                         best_elev = Some(elev_id);
                     }
-        
+            
                     println!("cost for {:?} is {:?}", elev_id, cost);
                 }
             }
