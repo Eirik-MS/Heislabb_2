@@ -421,7 +421,13 @@ impl Decision {
                                     }
                                     }
                                     if (local_order.status == OrderStatus::Requested || local_order.status == OrderStatus::Completed) {
+                                        println!("attaching barriers {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
                                         local_order.barrier = received_order.barrier.clone(); //maintain barrier
+                                        local_order.barrier.insert(recvd.source_id.clone());
+                                        local_order.barrier.insert(self.local_id.clone());
+                                    } else if local_order.status == OrderStatus::Completed{
+                                        println!("attaching barriers  {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
+                                        local_order.barrier = received_order.barrier.clone();
                                         local_order.barrier.insert(recvd.source_id.clone());
                                         local_order.barrier.insert(self.local_id.clone());
                                     }
@@ -435,11 +441,14 @@ impl Decision {
                         if !found {
                             println!("Recvd unexisting order {:?} with id {:?}", received_order, elev_id);
                             let mut order = received_order.clone();
+
                             if order.status == OrderStatus::Completed {
+                                println!("attaching barriers  {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
                                 order.barrier = received_order.barrier.clone(); //maintain barrier
                                 order.barrier.insert(recvd.source_id.clone());
                                 order.barrier.insert(self.local_id.clone());
                             } else if order.status == OrderStatus::Completed{
+                                println!("attaching barriers  {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
                                 order.barrier = received_order.barrier.clone();
                                 order.barrier.insert(recvd.source_id.clone());
                                 order.barrier.insert(self.local_id.clone());
