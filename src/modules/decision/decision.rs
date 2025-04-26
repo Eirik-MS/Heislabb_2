@@ -634,7 +634,7 @@ impl Decision {
                 if let Some(state) = all_states.get(elev_id) {
                     let cost = Self::cost_fn(state, &order);
             
-                    if cost < best_cost || (cost == best_cost && best_elev.map_or(true, |id| elev_id < id)) {
+                    if cost < best_cost {
                         best_cost = cost;
                         best_elev = Some(elev_id);
                     }
