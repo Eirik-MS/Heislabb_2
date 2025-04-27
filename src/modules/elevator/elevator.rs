@@ -292,6 +292,9 @@ impl ElevatorController {
                     match reciving_confirmation {
                         Some(order) => {
                             self.elevator.call_button_light(order.floor, order.call, true);
+                            while let Ok(next_order) = order_recived_and_confirmed_guard.try_recv() {
+                                self.elevator.call_button_light(next_order.floor, next_order.call, true);
+                            }
                         }
                         None => {
                             //println!("order_recived_and_confirmed_rx channel closed.");

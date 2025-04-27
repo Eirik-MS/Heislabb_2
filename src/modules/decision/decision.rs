@@ -421,6 +421,8 @@ impl Decision {
                                                 }
                                                 if received_order.source_id.contains(&self.local_id) {
                                                     let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
+                                                } else if local_order.source_id.contains(&self.local_id) {
+                                                    let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
                                                 }
                                                 for r_source in &received_order.source_id {
                                                     if r_source != &self.local_id {
