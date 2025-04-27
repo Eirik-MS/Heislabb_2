@@ -591,26 +591,19 @@ impl Decision {
  
     pub async fn hall_order_assigner(& self) {
         let mut broadcast = self.local_broadcastmessage.write().await;
-        println!("Broadcast message: {:?}", *broadcast);
+        println!("Broadcast message before reassignement: {:#?}", *broadcast);
         let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
         let mut states = std::collections::HashMap::new();
-        //println!("Temp created.");
+
         //1.1 map hall orders
         for orders in broadcast.orders.values() {
             for order in orders {
-                if order.status == OrderStatus::Confirmed && order.call < 2 {
+                if order.status == OrderStatus::Confirmed && order.call < 2 { 
                     hall_requests[(order.floor) as usize][order.call as usize] = true;
                 }
             }
         }
 
-        /*
-            if state.direction != stop 
-                state = moving
-            if state.dooropen 
-                state dorropen
-            else idle
-        */
         //println!("Check other elevators");
         for (id, state) in &broadcast.states {
             //println!("Checking elevator: {}", id);
@@ -629,7 +622,7 @@ impl Decision {
                 })
             })
             .collect();
-            //println!("Cab requests: {:?}", cab_requests);
+            println!("Cab requests: {:?}", cab_requests);
         
             let behaviour = if state.door_open {
                 "doorOpen"
@@ -657,7 +650,7 @@ impl Decision {
             "states": states
         }).to_string();
         
-        println!("{}", serde_json::to_string_pretty(&input_json).unwrap());
+       // println!("{}", serde_json::to_string_pretty(&input_json).unwrap());
 
         //2. use hall order assigner
         let hra_output = Command::new("./hall_request_assigner")
@@ -679,10 +672,11 @@ impl Decision {
             for (elev_id, floors) in &hra_output {
                 println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
             }
-
+            println!("hra output {:#?}", &hra_output);
             // 3. update local broadcast message according to the return value of executable - hra_output
             for (new_elevator_id, orders) in hra_output.iter() {
                 for (floor_index, buttons) in orders.iter().enumerate() {
+                    for button in &buttons[..2] {
                     let floor = (floor_index) as u8; 
                     for (call_type, &is_confirmed) in buttons.iter().enumerate() { //call type can only be either 0 or 1 (up, down)
                         if is_confirmed { //true e. i. there is an order
@@ -715,6 +709,7 @@ impl Decision {
                         }
                     }
                 }
+                }
             }
         }
         
@@ -731,10 +726,10 @@ impl Decision {
                         {
                             
                             if (local_order.status == OrderStatus::Requested) {
-                                println!("attaching barriers {:?}, {:?}, {:?}", received_order.barrier.clone(), broadcast.source_id.clone(), self.local_id.clone());
+                                println!("attaching barriers in hall assigner {:?}, {:?}, {:?}", received_order.barrier.clone(), broadcast.source_id.clone(), self.local_id.clone());
                                 local_order.barrier = received_order.barrier.clone(); //maintain barrier
                             } else if local_order.status == OrderStatus::Completed{
-                                println!("attaching barriers  {:?}, {:?}, {:?}", received_order.barrier.clone(), broadcast.source_id.clone(), self.local_id.clone());
+                                println!("attaching barriers in hall assigner {:?}, {:?}, {:?}", received_order.barrier.clone(), broadcast.source_id.clone(), self.local_id.clone());
                                 local_order.barrier = received_order.barrier.clone();
                             }
                             else {
@@ -773,7 +768,7 @@ impl Decision {
 
        // broadcast.orders = new_orders;
        // println!("Hall order assigner finished.");
-      println!("my local message: {:#?}", broadcast);
+      println!("my local message after reassignement: {:#?}", broadcast);
  
     }
  
