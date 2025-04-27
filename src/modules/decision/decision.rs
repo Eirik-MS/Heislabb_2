@@ -488,14 +488,14 @@ impl Decision {
                                 order.barrier.insert(self.local_id.clone());
                             }
                             
-                            if received_order.source_id.contains(elev_id) && received_order.call == 2 {
-                                println!("CAB order MISTAKE");
-                            } else {
+                            //if received_order.source_id.contains(elev_id) && received_order.call == 2 {
+                            //    println!("CAB order MISTAKE");
+                            //} else {
                                 local_msg.orders.entry(elev_id.clone())
                                 .or_insert_with(Vec::new)
                                 .push(order);
                             
-                            }
+                            //}
                             
                         }
 
