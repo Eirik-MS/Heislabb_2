@@ -158,13 +158,14 @@ impl ElevatorController {
                     let call_button = a.unwrap();
                     //println!("{:#?}", call_button);
 
-                    let order = Order {
+                    let mut order = Order {
                         call: call_button.call,
                         floor: call_button.floor,
                         status: OrderStatus::Requested,
                         barrier: HashSet::new(),
-                        source_id: generateIDs().expect("Failed to generate ID"),
+                        source_id: HashSet::new(),
                     }; 
+                    order.source_id.insert(generateIDs().unwrap());
 
                     let _ = self.new_orders_from_elevator_tx.send(order).await;
 

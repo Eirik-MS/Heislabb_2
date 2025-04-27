@@ -234,7 +234,7 @@ impl Decision {
                                 println!("Updating status from Noorder to Requested for hall order.");
                                 existing_order.status = OrderStatus::Requested;
                                 existing_order.barrier.insert(self.local_id.clone()); //need to go to confirmed
-                                existing_order.source_id = self.local_id.clone(); //update source id
+                                existing_order.source_id.insert(self.local_id.clone()); //update source id
                             }
                         }
                     }
@@ -360,6 +360,7 @@ impl Decision {
                                                 //}
                                                 if received_order.status == OrderStatus::Requested {
                                                     local_order.status = OrderStatus::Requested;
+
                                                     // println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
                                                     // if (received_order.status == OrderStatus::Requested) {
                                                     //     local_order.barrier.insert(recvd.source_id.clone());
@@ -373,6 +374,10 @@ impl Decision {
                                                 } 
                                                 else {
                                                     local_order.barrier.clear(); 
+                                                    if received_order.source_id.contains(&self.local_id) {
+                                                        let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                                                        local_order.source_id.clear();
+                                                    }
                                                 }
                                             }
                                             OrderStatus::Requested => {
@@ -380,7 +385,7 @@ impl Decision {
                                                 // println!("REQUESTED removing barrier {:?}", self.local_id.clone());
                                                     local_order.status = OrderStatus::Confirmed; // TRUST
                                                     local_order.barrier.clear(); 
-                                                    if received_order.source_id == self.local_id{
+                                                    if received_order.source_id.contains(&self.local_id) {
                                                         let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
                                                     }
                                                 } else if received_order.status == OrderStatus::Completed {
@@ -400,7 +405,7 @@ impl Decision {
                                                 }
                                             }
                                             OrderStatus::Confirmed => {
-                                                if received_order.source_id == self.local_id {
+                                                if received_order.source_id.contains(&self.local_id) {
                                                     let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
                                                 }
                                                 if received_order.status == OrderStatus::Completed {
@@ -426,12 +431,14 @@ impl Decision {
                                             // }
                                         
                                             OrderStatus::Completed => {
+                                                if received_order.source_id.contains(&self.local_id) {
+                                                    let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                                                    local_order.source_id.clear();
+                                                }
                                                 if received_order.status == OrderStatus::Noorder {
                                                     local_order.status = OrderStatus::Noorder; //TRUST
                                                     println!("NOORDER State change");
-                                                    if received_order.source_id == self.local_id {
-                                                        let _ = self.order_completed_other_tx.send(received_order.clone()).await;
-                                                    }
+
                                                 } else {
                                                     // println!("cCOMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
                                                     // if (received_order.status == OrderStatus::Completed) {
@@ -480,10 +487,8 @@ impl Decision {
                                 order.barrier.insert(recvd.source_id.clone());
                                 order.barrier.insert(self.local_id.clone());
                             }
-                            if received_order.source_id != self.local_id {
-                            println!("Adding order {:?} with id {:?} with local id{:?}", order, elev_id, self.local_id);
-                            } 
-                            if received_order.source_id != *elev_id && received_order.call == 2 {
+                            
+                            if received_order.source_id.contains(elev_id) && received_order.call == 2 {
                                 println!("CAB order MISTAKE");
                             } else {
                                 local_msg.orders.entry(elev_id.clone())
@@ -784,7 +789,7 @@ impl Decision {
         
         for (elevator_id, orders) in new_orders {
             for order in orders {
-                if order.call == 2 && order.source_id != elevator_id {
+                if order.call == 2 && order.source_id.contains(&elevator_id) {
                     println!("CAB order  {:?} that belongs to {:?} and i am {:?}", order, elevator_id, self.local_id);
                     //order.barrier.insert(self.local_id.clone());
                     //order.barrier.insert(broadcast.source_id.clone());
