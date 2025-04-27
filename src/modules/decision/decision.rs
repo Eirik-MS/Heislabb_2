@@ -469,8 +469,10 @@ impl Decision {
                             
                         }
 
-                        if received_order.status == OrderStatus::Completed && received_order.source_id == self.local_id {
-                            let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                        if received_order.status == OrderStatus::Completed || received_order.status == OrderStatus::Noorder {
+                            if received_order.source_id == self.local_id {
+                                let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                            }
                         }
  
                     }
