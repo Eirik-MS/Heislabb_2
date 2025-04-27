@@ -346,89 +346,97 @@ impl Decision {
  
                         for (lid, local_orders) in local_msg.orders.iter_mut() {
                             for local_order in local_orders.iter_mut() {
-                                if local_order.floor == received_order.floor //find unique hall order
+                                if  local_order.floor == received_order.floor //find unique hall order
                                     && local_order.call == received_order.call
                                 {
-                                    
-                                    if local_order.call == 1 || local_order.call == 0 || (local_order.call == 2 && *lid != source_id) { //status is changed only fro HALL orders
                                     found = true;
-                                    match local_order.status {
-                                        OrderStatus::Noorder => {
-                                            if received_order.status == OrderStatus::Requested {
-                                                local_order.status = OrderStatus::Requested;
-                                                // println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
-                                                // if (received_order.status == OrderStatus::Requested) {
-                                                //     local_order.barrier.insert(recvd.source_id.clone());
-                                                // }
-                                                // local_order.barrier.insert(self.local_id.clone());
-                                                // println!("CURRENT barrier {:?}", local_order.barrier);
-                                            } 
-                                            else if received_order.status == OrderStatus::Confirmed { //TRUST
-                                                local_order.status = OrderStatus::Confirmed;
-                                                local_order.barrier.clear(); 
-                                            } 
-                                            else {
-                                                local_order.barrier.clear(); 
+                                    if local_order.call == 1 || local_order.call == 0 { //status is changed only fro HALL orders
+                                        found = true;
+                                        match local_order.status {
+                                            OrderStatus::Noorder => {
+                                                if received_order.status == OrderStatus::Requested {
+                                                    local_order.status = OrderStatus::Requested;
+                                                    // println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
+                                                    // if (received_order.status == OrderStatus::Requested) {
+                                                    //     local_order.barrier.insert(recvd.source_id.clone());
+                                                    // }
+                                                    // local_order.barrier.insert(self.local_id.clone());
+                                                    // println!("CURRENT barrier {:?}", local_order.barrier);
+                                                } 
+                                                else if received_order.status == OrderStatus::Confirmed { //TRUST
+                                                    local_order.status = OrderStatus::Confirmed;
+                                                    local_order.barrier.clear(); 
+                                                } 
+                                                else {
+                                                    local_order.barrier.clear(); 
+                                                }
                                             }
-                                        }
-                                        OrderStatus::Requested => {
-                                            if received_order.status == OrderStatus::Confirmed {
-                                               // println!("REQUESTED removing barrier {:?}", self.local_id.clone());
-                                                local_order.status = OrderStatus::Confirmed; // TRUST
-                                                local_order.barrier.clear(); 
-                                            } else if received_order.status == OrderStatus::Completed {
-                                                local_order.status = OrderStatus::Completed; 
-                                                // if (received_order.status == OrderStatus::Completed) {
-                                                //     local_order.barrier.insert(recvd.source_id.clone());
-                                                // }
-                                                // local_order.barrier.insert(self.local_id.clone());
-                                            } 
-                                            else {
-                                                // println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
-                                                // if (received_order.status == OrderStatus::Requested) {
-                                                //     local_order.barrier.insert(recvd.source_id.clone());
-                                                // }
-                                                // local_order.barrier.insert(self.local_id.clone());
-                                                // println!("CURRENT barrier {:?}", local_order.barrier);
+                                            OrderStatus::Requested => {
+                                                if received_order.status == OrderStatus::Confirmed {
+                                                // println!("REQUESTED removing barrier {:?}", self.local_id.clone());
+                                                    local_order.status = OrderStatus::Confirmed; // TRUST
+                                                    local_order.barrier.clear(); 
+                                                } else if received_order.status == OrderStatus::Completed {
+                                                    local_order.status = OrderStatus::Completed; 
+                                                    // if (received_order.status == OrderStatus::Completed) {
+                                                    //     local_order.barrier.insert(recvd.source_id.clone());
+                                                    // }
+                                                    // local_order.barrier.insert(self.local_id.clone());
+                                                } 
+                                                else {
+                                                    // println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
+                                                    // if (received_order.status == OrderStatus::Requested) {
+                                                    //     local_order.barrier.insert(recvd.source_id.clone());
+                                                    // }
+                                                    // local_order.barrier.insert(self.local_id.clone());
+                                                    // println!("CURRENT barrier {:?}", local_order.barrier);
+                                                }
                                             }
-                                        }
-                                        OrderStatus::Confirmed => {
-                                            if received_order.source_id == self.local_id {
-                                                let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
-                                            }
-                                            if received_order.status == OrderStatus::Completed {
-                                                local_order.status = OrderStatus::Completed;
-                                                // println!("COMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
-                                                // if (received_order.status == OrderStatus::Completed) {
-                                                //     local_order.barrier.insert(recvd.source_id.clone());
-                                                // }
-                                                // local_order.barrier.insert(self.local_id.clone());
-                                                // println!("CURRENT barrier {:?}", local_order.barrier);
+                                            OrderStatus::Confirmed => {
+                                                if received_order.source_id == self.local_id {
+                                                    let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
+                                                }
+                                                if received_order.status == OrderStatus::Completed {
+                                                    local_order.status = OrderStatus::Completed;
+                                                    // println!("COMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
+                                                    // if (received_order.status == OrderStatus::Completed) {
+                                                    //     local_order.barrier.insert(recvd.source_id.clone());
+                                                    // }
+                                                    // local_order.barrier.insert(self.local_id.clone());
+                                                    // println!("CURRENT barrier {:?}", local_order.barrier);
 
-                                                // println!("local order: {:#?} belongs to {:?}", local_order, lid);
-                                                // println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
-                                            }
-                                            // else if received_order.status == OrderStatus::Confirmed {
-                                            //     local_order.status = OrderStatus::Confirmed; // TRUST
-                                            //     local_order.barrier.clear(); 
-                                            // }
-                                        }
-                                        OrderStatus::Completed => {
-                                            if received_order.source_id == self.local_id {
-                                                let _ = self.order_completed_other_tx.send(received_order.clone()).await;
-                                            }
-                                            if received_order.status == OrderStatus::Noorder {
-                                                local_order.status = OrderStatus::Noorder; //TRUST
-                                                println!("NOORDER State change");
-                                            } else {
-                                                // println!("cCOMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
-                                                // if (received_order.status == OrderStatus::Completed) {
-                                                //     local_order.barrier.insert(recvd.source_id.clone());
+                                                    // println!("local order: {:#?} belongs to {:?}", local_order, lid);
+                                                    // println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
+                                                }
+                                                // else if received_order.status == OrderStatus::Confirmed {
+                                                //     local_order.status = OrderStatus::Confirmed; // TRUST
+                                                //     local_order.barrier.clear(); 
                                                 // }
-                                                // local_order.barrier.insert(self.local_id.clone());
+                                            }
+                                            OrderStatus::Completed => {
+                                                if received_order.source_id == self.local_id {
+                                                    let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                                                }
+                                                if received_order.status == OrderStatus::Noorder {
+                                                    local_order.status = OrderStatus::Noorder; //TRUST
+                                                    println!("NOORDER State change");
+                                                } else {
+                                                    // println!("cCOMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
+                                                    // if (received_order.status == OrderStatus::Completed) {
+                                                    //     local_order.barrier.insert(recvd.source_id.clone());
+                                                    // }
+                                                    // local_order.barrier.insert(self.local_id.clone());
+                                                }
                                             }
                                         }
                                     }
+                                    else { //for cab orders floor. call and id should match
+                                        if *lid == *elev_id {
+                                            found = true;
+                                        }
+                                        else {
+                                            found = false;
+                                        }
                                     }
                                     if (local_order.status == OrderStatus::Requested && received_order.status == OrderStatus::Requested) {
                                         println!("attaching barriers {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
