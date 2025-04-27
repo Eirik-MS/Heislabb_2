@@ -28,6 +28,7 @@ pub struct Order {
     pub floor: u8, //1,2,3,4
     pub status: OrderStatus,
     pub barrier: HashSet<String>, //barrier for requested->confirmed & confirmed->norder
+    pub source_id: String, //elevator ID
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

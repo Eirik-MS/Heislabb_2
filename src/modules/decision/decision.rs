@@ -389,6 +389,9 @@ impl Decision {
                                             }
                                         }
                                         OrderStatus::Confirmed => {
+                                            if received_order.source_id == self.local_id {
+                                                let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
+                                            }
                                             if received_order.status == OrderStatus::Completed {
                                                 local_order.status = OrderStatus::Completed;
                                                 // println!("COMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
@@ -763,7 +766,7 @@ impl Decision {
                 // Only consider confirmed and requested orders
                 if new_order.status == OrderStatus::Confirmed {
                     //println!("Sending new confirmed order to elevator {}: floor {}, call {:?}",elevator_id, new_order.floor, new_order.call);
-                    self.orders_recived_confirmed_tx.send(new_order.clone()).await;
+                    
                     self.elevator_assigned_orders_tx.send(new_order.clone()).await;
                 }
             }
