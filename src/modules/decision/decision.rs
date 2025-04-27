@@ -432,7 +432,7 @@ impl Decision {
                                             }
                                         }
                                     }
-                                    else if *lid == *elev_id && local_order.call == 2{ //for cab orders floor. call and id should match
+                                    if *lid == *elev_id && local_order.call == 2{ //for cab orders floor. call and id should match
                                         println!("CAB: same floor, call and id {:?}", *lid);
                                         found = true;
 
