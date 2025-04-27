@@ -37,7 +37,7 @@ pub struct Decision {
     new_elev_state_rx: watch::Receiver<ElevatorState>, //state to modify
     order_completed_rx: mpsc::Receiver<u8>, //elevator floor
     new_order_rx: mpsc::Receiver<Order>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
-    elevator_assigned_orders_tx: mpsc::Sender<Order>, //one order only actually, s is typo
+    elevator_assigned_orders_tx: mpsc::Sender<Vec<Order>>, //one order only actually, s is typo
     orders_recived_confirmed_tx: mpsc::Sender<Order>, //send to network
     order_completed_other_tx: mpsc::Sender<Order>, //send to elevator if someone ele completed order
 }
@@ -53,7 +53,7 @@ impl Decision {
         new_elev_state_rx: watch::Receiver<ElevatorState>,
         order_completed_rx: mpsc::Receiver<u8>,
         new_order_rx: mpsc::Receiver<Order>,
-        elevator_assigned_orders_tx: mpsc::Sender<Order>,
+        elevator_assigned_orders_tx: mpsc::Sender<Vec<Order>>,
         orders_recived_confirmed_tx: mpsc::Sender<Order>,
         order_completed_other_tx: mpsc::Sender<Order>,
     ) -> Self {
@@ -783,15 +783,16 @@ impl Decision {
             }
             
             let old_orders_list = broadcast.orders.get(elevator_id);
-        
+
+            let mut assined_orders = Vec::new();
             for new_order in new_orders_list {
                 // Only consider confirmed and requested orders
                 if new_order.status == OrderStatus::Confirmed {
                     //println!("Sending new confirmed order to elevator {}: floor {}, call {:?}",elevator_id, new_order.floor, new_order.call);
-                    
-                    self.elevator_assigned_orders_tx.send(new_order.clone()).await;
+                    assined_orders.push(new_order.clone());   
                 }
             }
+            self.elevator_assigned_orders_tx.send(assined_orders.clone()).await;
         }
 
 
