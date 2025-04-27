@@ -231,9 +231,11 @@ impl Decision {
                             if existing_order.floor == order.floor &&
                                existing_order.call == order.call &&
                                existing_order.status == OrderStatus::Noorder {
-                                println!("Updating status from Noorder to Requested for hall order.");
-                                existing_order.status = OrderStatus::Requested;
-                                existing_order.barrier.insert(self.local_id.clone()); //need to go to confirmed
+                                    println!("Updating status from Noorder to Requested for hall order.");
+                                    existing_order.status = OrderStatus::Requested;
+                                    existing_order.barrier.insert(self.local_id.clone()); //need to go to confirmed
+                                    existing_order.source_id.insert(self.local_id.clone()); //update source id
+                            } else if existing_order.floor == order.floor && existing_order.call == order.call {
                                 existing_order.source_id.insert(self.local_id.clone()); //update source id
                             }
                         }
@@ -374,10 +376,9 @@ impl Decision {
                                                 } 
                                                 else {
                                                     local_order.barrier.clear(); 
-                                                    if received_order.source_id.contains(&self.local_id) {
-                                                        let _ = self.order_completed_other_tx.send(received_order.clone()).await;
-                                                        local_order.source_id.clear();
-                                                    }
+                                                    let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                                                    local_order.source_id.clear();
+                                                   
                                                 }
                                             }
                                             OrderStatus::Requested => {
@@ -385,6 +386,7 @@ impl Decision {
                                                 // println!("REQUESTED removing barrier {:?}", self.local_id.clone());
                                                     local_order.status = OrderStatus::Confirmed; // TRUST
                                                     local_order.barrier.clear(); 
+
                                                     if received_order.source_id.contains(&self.local_id) {
                                                         let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
                                                     }
@@ -405,9 +407,6 @@ impl Decision {
                                                 }
                                             }
                                             OrderStatus::Confirmed => {
-                                                if received_order.source_id.contains(&self.local_id) {
-                                                    let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
-                                                }
                                                 if received_order.status == OrderStatus::Completed {
                                                     local_order.status = OrderStatus::Completed;
                                                     // println!("COMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
@@ -419,6 +418,14 @@ impl Decision {
 
                                                     // println!("local order: {:#?} belongs to {:?}", local_order, lid);
                                                     // println!("received order: {:#?} belongs to {:?}", received_order, elev_id);
+                                                }
+                                                if received_order.source_id.contains(&self.local_id) {
+                                                    let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
+                                                }
+                                                for r_source in &received_order.source_id {
+                                                    if r_source != &self.local_id {
+                                                        local_order.source_id.insert(r_source.clone());
+                                                    }
                                                 }
                                                 // else if received_order.status == OrderStatus::Confirmed {
                                                 //     local_order.status = OrderStatus::Confirmed; // TRUST
