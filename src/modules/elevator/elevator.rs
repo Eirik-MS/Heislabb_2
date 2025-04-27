@@ -275,7 +275,7 @@ impl ElevatorController {
                 reciving_order = elevator_assigned_orders_guard.recv() => {
                     match reciving_order {
                         Some(order) => {
-                            println!("Elevator assigned order: {:#?}", order);
+                            //println!("Elevator assigned order: {:#?}", order);
                             self.add_order(order).await;
                             //Empty the queue
                             while let Ok(next_order) = elevator_assigned_orders_guard.try_recv() {

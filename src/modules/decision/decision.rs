@@ -349,7 +349,7 @@ impl Decision {
                                 if  local_order.floor == received_order.floor 
                                     && local_order.call == received_order.call
                                 {
-                                    if (local_order.call == 2 && *lid == *elev_id) {println!("when call {} and lid {} is {}", local_order.call, *lid, *elev_id);}
+                                    //if (local_order.call == 2 && *lid == *elev_id) {println!("when call {} and lid {} is {}", local_order.call, *lid, *elev_id);}
                                     if local_order.call == 1 || local_order.call == 0 || (local_order.call == 2 && *lid == *elev_id) { 
                                         found = true;
                                         match local_order.status {
@@ -458,7 +458,7 @@ impl Decision {
                         if !found {
                             println!("Recvd unexisting order {:?} with id {:?}", received_order, elev_id);
                             let mut order = received_order.clone();
-                            if received_order.call == 2 { println!("CAB ORDER THAT DIDNT EXIST?? {:?}", received_order);}
+                            //if received_order.call == 2 { println!("CAB ORDER THAT DIDNT EXIST?? {:?}", received_order);}
                             if order.status == OrderStatus::Completed {
                                 println!("attaching barriers  {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
                                 //order.barrier = received_order.barrier.clone(); //maintain barrier
@@ -470,9 +470,17 @@ impl Decision {
                                 order.barrier.insert(recvd.source_id.clone());
                                 order.barrier.insert(self.local_id.clone());
                             }
-                            local_msg.orders.entry(elev_id.clone())
+                            if received_order.source_id != self.local_id {
+                            println!("Adding order {:?} with id {:?} with local id{:?}", order, elev_id, self.local_id);
+                            } 
+                            if received_order.source_id != *elev_id && received_order.call == 2 {
+                                println!("CAB order MISTAKE");
+                            } else {
+                                local_msg.orders.entry(elev_id.clone())
                                 .or_insert_with(Vec::new)
                                 .push(order);
+                            
+                            }
                             
                         }
 
@@ -485,7 +493,7 @@ impl Decision {
                     }
                 }
             }
-            println!("Updated local broadcast message {:#?}", local_msg.orders);
+            //println!("Updated local broadcast message {:#?}", local_msg.orders);
  
             for (id, state) in recvd.states { //merging
                 local_msg.states.insert(id, state);
