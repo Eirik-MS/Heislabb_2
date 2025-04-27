@@ -338,7 +338,7 @@ impl Decision {
           //  println!("local broadcast message {:#?}", local_msg);
             for (elev_id, received_orders) in &recvd.orders {
                 for mut received_order in received_orders {
-                    if received_order.call == 0 || received_order.call == 1 || received_order.call == 2 { //hall order or cab idk
+                    if received_order.call == 0 || received_order.call == 1 || received_order.call == 2 { //remove
                         let mut found = false;
  
                         for (lid, local_orders) in local_msg.orders.iter_mut() {
@@ -346,8 +346,9 @@ impl Decision {
                                 if local_order.floor == received_order.floor //find unique hall order
                                     && local_order.call == received_order.call
                                 {
-                                    found = true;
+                                    
                                     if local_order.call == 1 || local_order.call == 0 || (local_order.call == 2 && *lid != source_id) { //status is changed only fro HALL orders
+                                    found = true;
                                     match local_order.status {
                                         OrderStatus::Noorder => {
                                             if received_order.status == OrderStatus::Requested {
@@ -451,12 +452,12 @@ impl Decision {
 
                             if order.status == OrderStatus::Completed {
                                 println!("attaching barriers  {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
-                                order.barrier = received_order.barrier.clone(); //maintain barrier
+                                //order.barrier = received_order.barrier.clone(); //maintain barrier
                                 order.barrier.insert(recvd.source_id.clone());
                                 order.barrier.insert(self.local_id.clone());
                             } else if order.status == OrderStatus::Completed{
                                 println!("attaching barriers  {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
-                                order.barrier = received_order.barrier.clone();
+                                //order.barrier = received_order.barrier.clone();
                                 order.barrier.insert(recvd.source_id.clone());
                                 order.barrier.insert(self.local_id.clone());
                             }
