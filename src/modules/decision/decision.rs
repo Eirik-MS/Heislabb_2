@@ -349,7 +349,7 @@ impl Decision {
                                 if  local_order.floor == received_order.floor //find unique hall order
                                     && local_order.call == received_order.call
                                 {
-                                    found = true;
+                                    
                                     if local_order.call == 1 || local_order.call == 0 { //status is changed only fro HALL orders
                                         found = true;
                                         match local_order.status {
@@ -432,9 +432,11 @@ impl Decision {
                                     }
                                     else { //for cab orders floor. call and id should match
                                         if *lid == *elev_id {
+                                            println!("CAB: same floor, call and id {:?}", *lid);
                                             found = true;
                                         }
                                         else {
+                                            println!("CAB: same floor, call and diff id {:?} and {:?}", *lid, *elev_id);
                                             found = false;
                                         }
                                     }
