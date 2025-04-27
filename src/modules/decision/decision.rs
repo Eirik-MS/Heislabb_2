@@ -354,6 +354,9 @@ impl Decision {
                                         found = true;
                                         match local_order.status {
                                             OrderStatus::Noorder => {
+                                                //if received_order.source_id == self.local_id {
+                                                //    let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                                                //}
                                                 if received_order.status == OrderStatus::Requested {
                                                     local_order.status = OrderStatus::Requested;
                                                     // println!("REQUESTED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
@@ -376,6 +379,9 @@ impl Decision {
                                                 // println!("REQUESTED removing barrier {:?}", self.local_id.clone());
                                                     local_order.status = OrderStatus::Confirmed; // TRUST
                                                     local_order.barrier.clear(); 
+                                                    if received_order.source_id == self.local_id{
+                                                        let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
+                                                    }
                                                 } else if received_order.status == OrderStatus::Completed {
                                                     local_order.status = OrderStatus::Completed; 
                                                     // if (received_order.status == OrderStatus::Completed) {
@@ -422,6 +428,9 @@ impl Decision {
                                                 if received_order.status == OrderStatus::Noorder {
                                                     local_order.status = OrderStatus::Noorder; //TRUST
                                                     println!("NOORDER State change");
+                                                    if received_order.source_id == self.local_id {
+                                                        let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                                                    }
                                                 } else {
                                                     // println!("cCOMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
                                                     // if (received_order.status == OrderStatus::Completed) {
@@ -484,11 +493,11 @@ impl Decision {
                             
                         }
 
-                        if received_order.status == OrderStatus::Noorder { //
-                            if received_order.source_id == self.local_id {
-                                let _ = self.order_completed_other_tx.send(received_order.clone()).await;
-                            }
-                        }
+                        //if received_order.status == OrderStatus::Noorder { //
+                        //    if received_order.source_id == self.local_id {
+                        //        let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                        //    }
+                        //}
  
                     }
                 }
