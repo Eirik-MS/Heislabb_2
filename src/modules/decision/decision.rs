@@ -340,7 +340,7 @@ impl Decision {
             println!("received broadcast message {:#?}", recvd);
           //  println!("local broadcast message {:#?}", local_msg);
             for (elev_id, received_orders) in &recvd.orders {
-                for mut received_order in received_orders {
+                for received_order in received_orders {
                     if received_order.call == 0 || received_order.call == 1 || received_order.call == 2 { //hall order or cab idk
                         let mut found = false;
  
@@ -413,9 +413,6 @@ impl Decision {
                                             // }
                                         }
                                         OrderStatus::Completed => {
-                                            if received_order.source_id == self.local_id {
-                                                let _ = self.order_completed_other_tx.send(received_order.clone()).await;
-                                            }
                                             if received_order.status == OrderStatus::Noorder {
                                                 local_order.status = OrderStatus::Noorder; //TRUST
                                                 println!("NOORDER State change");
@@ -470,6 +467,10 @@ impl Decision {
                                 .or_insert_with(Vec::new)
                                 .push(order);
                             
+                        }
+
+                        if received_order.status == OrderStatus::Completed && received_order.source_id == self.local_id {
+                            let _ = self.order_completed_other_tx.send(received_order.clone()).await;
                         }
  
                     }
