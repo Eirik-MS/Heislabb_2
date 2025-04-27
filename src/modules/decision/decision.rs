@@ -349,7 +349,7 @@ impl Decision {
                                 if  local_order.floor == received_order.floor 
                                     && local_order.call == received_order.call
                                 {
-                                    println!("when call {} and lid {} is {}", local_order.call, *lid, *elev_id);
+                                    if (local_order.call == 2 && *lid == *elev_id) {println!("when call {} and lid {} is {}", local_order.call, *lid, *elev_id);}
                                     if local_order.call == 1 || local_order.call == 0 || (local_order.call == 2 && *lid == *elev_id) { 
                                         found = true;
                                         match local_order.status {
@@ -458,7 +458,7 @@ impl Decision {
                         if !found {
                             println!("Recvd unexisting order {:?} with id {:?}", received_order, elev_id);
                             let mut order = received_order.clone();
-
+                            if received_order.call == 2 { println!("CAB ORDER THAT DIDNT EXIST?? {:?}", received_order);}
                             if order.status == OrderStatus::Completed {
                                 println!("attaching barriers  {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
                                 //order.barrier = received_order.barrier.clone(); //maintain barrier
