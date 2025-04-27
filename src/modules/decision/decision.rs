@@ -350,8 +350,10 @@ impl Decision {
                                     && local_order.call == received_order.call
                                 {
                                     
-                                    if local_order.call == 1 || local_order.call == 0 { //status is changed only fro HALL orders
-                                        found = true;
+                                    if local_order.call == 1 || local_order.call == 0 || local_order.call == 2 { //status is changed only fro HALL orders
+                                        if local_order.call != 2 {
+                                            found = true;
+                                        }
                                         match local_order.status {
                                             OrderStatus::Noorder => {
                                                 if received_order.status == OrderStatus::Requested {
@@ -430,11 +432,10 @@ impl Decision {
                                             }
                                         }
                                     }
-                                    else { //for cab orders floor. call and id should match
-                                        if *lid == *elev_id {
-                                            println!("CAB: same floor, call and id {:?}", *lid);
-                                            found = true;
-                                        }
+                                    else if *lid == *elev_id && local_order.call == 2{ //for cab orders floor. call and id should match
+                                        println!("CAB: same floor, call and id {:?}", *lid);
+                                        found = true;
+
                                     }
                                     if (local_order.status == OrderStatus::Requested && received_order.status == OrderStatus::Requested) {
                                         println!("attaching barriers {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
