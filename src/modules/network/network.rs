@@ -62,7 +62,7 @@ pub async fn network_sender(
 
 
         //wait a bit
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
     }
 }
 
@@ -95,10 +95,10 @@ pub async fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
         .expect("Time went backwards")
         .as_millis() as u64;
     let rtt = now_ms.saturating_sub(message.version);
-    println!(
-      "[UDPlistener] msg.version={}  →  received after {} ms",
-      message.version, rtt
-    );
+    //println!(
+    //  "[UDPlistener] msg.version={}  →  received after {} ms",
+    //  message.version, rtt
+    //);
 
     Some(message)
 }
