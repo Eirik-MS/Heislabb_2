@@ -428,6 +428,9 @@ impl Decision {
                                                         local_order.source_id.insert(r_source.clone());
                                                     }
                                                 }
+                                                if local_order.source_id.contains(&self.local_id) {
+                                                    let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
+                                                }
                                                 // else if received_order.status == OrderStatus::Confirmed {
                                                 //     local_order.status = OrderStatus::Confirmed; // TRUST
                                                 //     local_order.barrier.clear(); 
