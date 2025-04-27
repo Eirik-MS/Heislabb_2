@@ -350,7 +350,7 @@ impl Decision {
                                     && local_order.call == received_order.call
                                 {
                                     
-                                    if local_order.call == 1 || local_order.call == 0 || local_order.call == 2 { //status is changed only fro HALL orders
+                                    if local_order.call == 1 || local_order.call == 0 || (local_order.call == 2_&& *lid == *elev_id) { 
                                         if local_order.call != 2 {
                                             found = true;
                                         }
