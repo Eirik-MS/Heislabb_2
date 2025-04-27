@@ -435,10 +435,6 @@ impl Decision {
                                             println!("CAB: same floor, call and id {:?}", *lid);
                                             found = true;
                                         }
-                                        else {
-                                            println!("CAB: same floor, call and diff id {:?} and {:?}", *lid, *elev_id);
-                                            found = false;
-                                        }
                                     }
                                     if (local_order.status == OrderStatus::Requested && received_order.status == OrderStatus::Requested) {
                                         println!("attaching barriers {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
