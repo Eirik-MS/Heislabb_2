@@ -52,7 +52,7 @@ pub async fn network_sender(
                            .expect("Clock went backwards")
                            .as_millis() as u64;
 
-        let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30029);
+        let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30028);
         let ser_message = serde_json::to_string(&message).expect("Failed to serialize message");
 
 

@@ -105,7 +105,7 @@ async fn main() -> std::io::Result<()> {
     let udp_socket_sender = UdpSocket::bind("0.0.0.0:0").await?;
     udp_socket_sender.set_broadcast(true).expect("Failed to enable UDP broadcast");
     //let udp_socket_reciver  = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind receiving socket");
-    let udp_socket_reciver = UdpSocket::bind("0.0.0.0:30029").await?;
+    let udp_socket_reciver = UdpSocket::bind("0.0.0.0:30028").await?;
     udp_socket_reciver.set_broadcast(true).expect("Failed to enable UDP broadcast");
 
 
