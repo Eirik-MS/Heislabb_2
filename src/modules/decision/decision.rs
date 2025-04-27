@@ -422,12 +422,16 @@ impl Decision {
                                     }
                                     if (local_order.status == OrderStatus::Requested || local_order.status == OrderStatus::Completed) {
                                         println!("attaching barriers {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
-                                        local_order.barrier = received_order.barrier.clone(); //maintain barrier
+                                        for id in &received_order.barrier {
+                                            local_order.barrier.insert(id.clone()); //merging
+                                        }
                                         local_order.barrier.insert(recvd.source_id.clone());
                                         local_order.barrier.insert(self.local_id.clone());
                                     } else if local_order.status == OrderStatus::Completed{
                                         println!("attaching barriers  {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
-                                        local_order.barrier = received_order.barrier.clone();
+                                        for id in &received_order.barrier {
+                                            local_order.barrier.insert(id.clone());
+                                        }
                                         local_order.barrier.insert(recvd.source_id.clone());
                                         local_order.barrier.insert(self.local_id.clone());
                                     }
