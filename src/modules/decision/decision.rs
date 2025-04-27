@@ -234,6 +234,7 @@ impl Decision {
                                 println!("Updating status from Noorder to Requested for hall order.");
                                 existing_order.status = OrderStatus::Requested;
                                 existing_order.barrier.insert(self.local_id.clone()); //need to go to confirmed
+                                existing_order.source_id = self.local_id.clone(); //update source id
                             }
                         }
                     }
@@ -690,7 +691,7 @@ impl Decision {
             "states": states
         }).to_string();
         
-       // println!("{}", serde_json::to_string_pretty(&input_json).unwrap());
+        //println!("INPUT::\n{:#?}", serde_json::to_string_pretty(&input_json).unwrap());
 
         //2. use hall order assigner
         let hra_output = Command::new("./hall_request_assigner")
@@ -724,7 +725,7 @@ impl Decision {
     
                             let mut found_order: Option<Order> = None;
                             let mut previous_elevator_id: Option<String> = None;
-    
+                            
                             for (elevator_id, orders) in broadcast.orders.iter_mut() {
                                 if let Some(order) = orders.iter_mut().find(|order| order.floor == floor && order.call == call) {
                                     found_order = Some(order.clone());
@@ -753,7 +754,7 @@ impl Decision {
             }
         }
         
-
+        
 
 
         for (elev_id, received_orders) in &broadcast.orders {
