@@ -4,6 +4,8 @@ use std::thread::spawn;
 use tokio::time::{sleep, Duration};
 use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use std::collections::HashSet;
+use crate::network::generateIDs; 
+
 
 use crossbeam_channel as cbc;
 
@@ -158,6 +160,7 @@ impl ElevatorController {
                         floor: call_button.floor,
                         status: OrderStatus::Requested,
                         barrier: HashSet::new(),
+                        source_id: generateIDs().expect("Failed to generate ID"),
                     }; 
 
                     let _ = self.new_orders_from_elevator_tx.send(order).await;
