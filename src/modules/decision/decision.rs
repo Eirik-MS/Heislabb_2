@@ -419,17 +419,18 @@ impl Decision {
                                             //     local_order.status = OrderStatus::Confirmed; // TRUST
                                             //     local_order.barrier.clear(); 
                                             // }
-                                        }
-                                        OrderStatus::Completed => {
-                                            if received_order.status == OrderStatus::Noorder {
-                                                local_order.status = OrderStatus::Noorder; //TRUST
-                                                println!("NOORDER State change");
-                                            } else {
-                                                // println!("cCOMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
-                                                // if (received_order.status == OrderStatus::Completed) {
-                                                //     local_order.barrier.insert(recvd.source_id.clone());
-                                                // }
-                                                // local_order.barrier.insert(self.local_id.clone());
+                                        
+                                            OrderStatus::Completed => {
+                                                if received_order.status == OrderStatus::Noorder {
+                                                    local_order.status = OrderStatus::Noorder; //TRUST
+                                                    println!("NOORDER State change");
+                                                } else {
+                                                    // println!("cCOMPLETED attaching recv id {:?} to the barrier {:?}", elev_id.clone(), local_order.barrier);
+                                                    // if (received_order.status == OrderStatus::Completed) {
+                                                    //     local_order.barrier.insert(recvd.source_id.clone());
+                                                    // }
+                                                    // local_order.barrier.insert(self.local_id.clone());
+                                                }
                                             }
                                         }
                                     }
