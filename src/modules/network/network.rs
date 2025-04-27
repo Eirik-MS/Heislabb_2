@@ -2,7 +2,6 @@
 use crate::modules::common::*;
 use tokio::sync::mpsc::{Sender, Receiver};
 use tokio::sync::watch;
-use core::net;
 use std::net::{Ipv4Addr,SocketAddrV4};
 use serde_json;
 use if_addrs::get_if_addrs;
@@ -10,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Instant, Duration};
 use md5;
 use tokio::net::UdpSocket;
+use std::time::SystemTime;
 
 //====GenerateIDs====//
 
@@ -45,18 +45,24 @@ pub async fn network_sender(
             break;
         }
 
-        let message = decision_to_network_rx.borrow().clone();
+        let mut message = decision_to_network_rx.borrow().clone();
         //println!("Sending message: {:#?}", message);
+        message.version =  SystemTime::now()
+                           .duration_since(SystemTime::UNIX_EPOCH)
+                           .expect("Clock went backwards")
+                           .as_millis() as u64;
 
         let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30028);
         let ser_message = serde_json::to_string(&message).expect("Failed to serialize message");
+
 
         socket.send_to(ser_message.as_bytes(), broadcast_addr)
             .await
             .expect("Failed to broadcast message on port");
 
+
         //wait a bit
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
     }
 }
 
@@ -82,6 +88,17 @@ pub async fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
         // println!("While my ID is: {}", system_id);
         return None;
     }
+
+    // log one‐way latency (requires synced clocks!)
+    let now_ms = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_millis() as u64;
+    let rtt = now_ms.saturating_sub(message.version);
+    //println!(
+    //  "[UDPlistener] msg.version={}  →  received after {} ms",
+    //  message.version, rtt
+    //);
 
     Some(message)
 }

@@ -337,11 +337,11 @@ impl Decision {
         {
             let mut local_msg = self.local_broadcastmessage.write().await;
             let source_id = local_msg.source_id.clone();
-            println!("received broadcast message {:#?}", recvd);
+            println!("received broadcast message {:#?} from Elevator {:#?}", recvd.orders, recvd.source_id);
           //  println!("local broadcast message {:#?}", local_msg);
             for (elev_id, received_orders) in &recvd.orders {
-                for mut received_order in received_orders {
-                    if received_order.call == 0 || received_order.call == 1 || received_order.call == 2 { //remove
+                for received_order in received_orders {
+                    if received_order.call == 0 || received_order.call == 1 || received_order.call == 2 { //hall order or cab idk
                         let mut found = false;
  
                         for (lid, local_orders) in local_msg.orders.iter_mut() {
@@ -415,10 +415,12 @@ impl Decision {
                                                 //     local_order.barrier.clear(); 
                                                 // }
                                             }
+                                            // else if received_order.status == OrderStatus::Confirmed {
+                                            //     local_order.status = OrderStatus::Confirmed; // TRUST
+                                            //     local_order.barrier.clear(); 
+                                            // }
+                                        
                                             OrderStatus::Completed => {
-                                                if received_order.source_id == self.local_id {
-                                                    let _ = self.order_completed_other_tx.send(received_order.clone()).await;
-                                                }
                                                 if received_order.status == OrderStatus::Noorder {
                                                     local_order.status = OrderStatus::Noorder; //TRUST
                                                     println!("NOORDER State change");
@@ -479,11 +481,17 @@ impl Decision {
                                 .push(order);
                             
                         }
+
+                        if received_order.status == OrderStatus::Noorder { //
+                            if received_order.source_id == self.local_id {
+                                let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                            }
+                        }
  
                     }
                 }
             }
-            println!("Updated local broadcast message {:#?}", local_msg);
+            println!("Updated local broadcast message {:#?}", local_msg.orders);
  
             for (id, state) in recvd.states { //merging
                 local_msg.states.insert(id, state);

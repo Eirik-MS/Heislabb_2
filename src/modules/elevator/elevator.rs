@@ -301,6 +301,9 @@ impl ElevatorController {
                     match orders_completed_others_rx {
                         Some(order) => {
                             self.elevator.call_button_light(order.floor, order.call, false);
+                            while let Ok(next_order) = orders_completed_others_rx_guard.try_recv() {
+                                self.elevator.call_button_light(next_order.floor, next_order.call, false);
+                            }
                         }
                         None => {
                             //println!("orders_completed_others_rx channel closed.");
