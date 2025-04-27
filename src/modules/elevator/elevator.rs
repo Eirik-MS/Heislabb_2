@@ -160,13 +160,14 @@ impl ElevatorController {
                     let call_button = a.unwrap();
                     //println!("{:#?}", call_button);
 
-                    let order = Order {
+                    let mut order = Order {
                         call: call_button.call,
                         floor: call_button.floor,
                         status: OrderStatus::Requested,
                         barrier: HashSet::new(),
-                        source_id: generateIDs().expect("Failed to generate ID"),
+                        source_id: HashSet::new(),
                     }; 
+                    order.source_id.insert(generateIDs().unwrap());
 
                     let _ = self.new_orders_from_elevator_tx.send(order).await;
 
@@ -322,6 +323,9 @@ impl ElevatorController {
                     match reciving_confirmation {
                         Some(order) => {
                             self.elevator.call_button_light(order.floor, order.call, true);
+                            while let Ok(next_order) = order_recived_and_confirmed_guard.try_recv() {
+                                self.elevator.call_button_light(next_order.floor, next_order.call, true);
+                            }
                         }
                         None => {
                             //println!("order_recived_and_confirmed_rx channel closed.");
