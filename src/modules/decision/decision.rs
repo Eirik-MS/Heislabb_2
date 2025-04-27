@@ -707,9 +707,9 @@ impl Decision {
             // 3. update local broadcast message according to the return value of executable - hra_output
             for (new_elevator_id, orders) in hra_output.iter() {
                 for (floor_index, buttons) in orders.iter().enumerate() {
-                    for button in &buttons[..2] {
                     let floor = (floor_index) as u8; 
-                    for (call_type, &is_confirmed) in buttons.iter().enumerate() { //call type can only be either 0 or 1 (up, down)
+                    for (call_type, &is_confirmed) in buttons.iter().take(2).enumerate() { //call type can only be either 0 or 1 (up, down)
+                        println!("uzise of buttons: {:?} and value: {:?}", call_type, is_confirmed);
                         if is_confirmed { //true e. i. there is an order
                             let call = call_type as u8; 
     
@@ -739,7 +739,7 @@ impl Decision {
                             }
                         }
                     }
-                }
+                
                 }
             }
         }
@@ -774,24 +774,27 @@ impl Decision {
         
         for (elevator_id, orders) in new_orders {
             for order in orders {
+                if order.call == 2 && order.source_id != elevator_id {
+                    println!("CAB order  {:?} that belongs to {:?} and i am {:?}", order, elevator_id, self.local_id);
+                    //order.barrier.insert(self.local_id.clone());
+                    //order.barrier.insert(broadcast.source_id.clone());
+                    //order.status = OrderStatus::Confirmed;
+                }
                 broadcast.orders.entry(elevator_id.clone()).or_default().push(order);
             }
         }
         // send order one by one to ELEVator        
         for (elevator_id, new_orders_list) in &broadcast.orders {
             // Only process orders for the local elevator
-            if *elevator_id != self.local_id {
-                continue;
-            }
-            
-            let old_orders_list = broadcast.orders.get(elevator_id);
-        
-            for new_order in new_orders_list {
-                // Only consider confirmed and requested orders
-                if new_order.status == OrderStatus::Confirmed {
-                    //println!("Sending new confirmed order to elevator {}: floor {}, call {:?}",elevator_id, new_order.floor, new_order.call);
+            if *elevator_id == self.local_id {
+                for new_order in new_orders_list {
+                    // Only consider confirmed and requested orders
                     
-                    self.elevator_assigned_orders_tx.send(new_order.clone()).await;
+                    if new_order.status == OrderStatus::Confirmed {
+                        //println!("Sending new confirmed order to elevator {}: floor {}, call {:?}",elevator_id, new_order.floor, new_order.call);
+                        
+                        self.elevator_assigned_orders_tx.send(new_order.clone()).await;
+                    }
                 }
             }
         }
