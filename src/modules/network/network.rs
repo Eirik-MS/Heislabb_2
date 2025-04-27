@@ -56,7 +56,7 @@ pub async fn network_sender(
             .expect("Failed to broadcast message on port");
 
         //wait a bit
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
     }
 }
 
