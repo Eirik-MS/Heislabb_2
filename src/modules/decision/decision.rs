@@ -598,6 +598,8 @@ impl Decision {
                        order.status = OrderStatus::Confirmed;
                        order.barrier.clear(); // anyway
                        status_changed = true;
+                       let _ = self.orders_recived_confirmed_tx.send(order.clone()).await;
+
                     //    println!("sending to elevator source id {:?} while order id {:?}", source_id, *_elev_id);
                     //    if self.local_id == *_elev_id {
                     //     println!("sending order {:?} with id {:?}", order.clone(), source_id);
