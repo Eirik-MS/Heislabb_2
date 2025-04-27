@@ -42,6 +42,7 @@ pub struct ElevatorController {
     orders_completed_tx: mpsc::Sender<u8>,
     elevator_assigned_orders_rx: Mutex<mpsc::Receiver<Order>>,
     elevator_state_tx: watch::Sender<ElevatorState>,
+    orders_completed_others_rx: Mutex<mpsc::Receiver<Order>>,
 }
 
 // Implementation the ElevatorController
@@ -53,7 +54,8 @@ impl ElevatorController {
                      elevator_assigned_orders_rx: mpsc::Receiver<Order>,
                      orders_completed_tx: mpsc::Sender<u8>,
                      elevator_state_tx: watch::Sender<ElevatorState>,
-                     orders_recived_confirmed_rx: mpsc::Receiver<Order>) -> std::io::Result<Arc<Self>>{
+                     orders_recived_confirmed_rx: mpsc::Receiver<Order>,
+                     orders_completed_others_rx: mpsc::Receiver<Order>) -> std::io::Result<Arc<Self>>{
         //Create the channels not passed in by main:                
         let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
         let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
@@ -95,6 +97,7 @@ impl ElevatorController {
             order_recived_and_confirmed_rx: Mutex::new(orders_recived_confirmed_rx),
             orders_completed_tx: orders_completed_tx,
             elevator_state_tx: elevator_state_tx,
+            orders_completed_others_rx: Mutex::new(orders_completed_others_rx),
         });
         let poll_period = controller.poll_period.clone();
 
@@ -244,6 +247,7 @@ impl ElevatorController {
             let mut door_closing_rx_guard = self.door_closing_rx.lock().await;
             let mut elevator_assigned_orders_guard = self.elevator_assigned_orders_rx.lock().await;
             let mut order_recived_and_confirmed_guard = self.order_recived_and_confirmed_rx.lock().await;
+            let mut orders_completed_others_rx_guard = self.orders_completed_others_rx.lock().await;
 
             //Comunicate with other modules    
             tokio::select! {
@@ -290,6 +294,16 @@ impl ElevatorController {
                         }
                         None => {
                             //println!("order_recived_and_confirmed_rx channel closed.");
+                        }
+                    }
+                },
+                orders_completed_others_rx = orders_completed_others_rx_guard.recv() => {
+                    match orders_completed_others_rx {
+                        Some(order) => {
+                            self.elevator.call_button_light(order.floor, order.call, false);
+                        }
+                        None => {
+                            //println!("orders_completed_others_rx channel closed.");
                         }
                     }
                 },

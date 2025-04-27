@@ -47,6 +47,7 @@ async fn main() -> std::io::Result<()> {
     let (orders_completed_tx, orders_completed_rx) = mpsc::channel(100);
     let (elevator_state_tx, elevator_state_rx) = watch::channel(dummystate);
     let (orders_confirmed_tx, orders_confirmed_rx) = mpsc::channel(100);
+    let (orders_cmpleted_others_tx, orders_completed_others_rx) = mpsc::channel(100);
 
     // Setup network channels 
     let (decision_to_network_tx, decision_to_network_rx) = watch::channel(BroadcastMessage::new(0));
@@ -58,7 +59,12 @@ async fn main() -> std::io::Result<()> {
     let elevator_handle = tokio::task::spawn_blocking(move || {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async move {
-            let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS, new_orders_from_elevator_tx, elevator_assigned_orders_rx, orders_completed_tx, elevator_state_tx, orders_confirmed_rx).await.unwrap();
+            let elev_ctrl = ElevatorController::new(NUM_OF_FLOORS, 
+                                                                            new_orders_from_elevator_tx, 
+                                                                            elevator_assigned_orders_rx, 
+                                                                            orders_completed_tx, elevator_state_tx,
+                                                                            orders_confirmed_rx,
+                                                                            orders_completed_others_rx).await.unwrap();
             loop {
                 elev_ctrl.step().await;
             }
@@ -77,6 +83,7 @@ async fn main() -> std::io::Result<()> {
             new_orders_from_elevator_rx,
             elevator_assigned_orders_tx,
             orders_confirmed_tx,
+            orders_cmpleted_others_tx,
         );
         
         loop {

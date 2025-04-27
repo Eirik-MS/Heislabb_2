@@ -39,6 +39,7 @@ pub struct Decision {
     new_order_rx: mpsc::Receiver<Order>, //should be mapped to cab or hall orders (has id, call, floor), needs DIR
     elevator_assigned_orders_tx: mpsc::Sender<Order>, //one order only actually, s is typo
     orders_recived_confirmed_tx: mpsc::Sender<Order>, //send to network
+    order_completed_other_tx: mpsc::Sender<Order>, //send to elevator if someone ele completed order
 }
  
 impl Decision {
@@ -54,6 +55,7 @@ impl Decision {
         new_order_rx: mpsc::Receiver<Order>,
         elevator_assigned_orders_tx: mpsc::Sender<Order>,
         orders_recived_confirmed_tx: mpsc::Sender<Order>,
+        order_completed_other_tx: mpsc::Sender<Order>,
     ) -> Self {
         Decision {
             local_id,
@@ -69,6 +71,7 @@ impl Decision {
             new_order_rx,
             elevator_assigned_orders_tx,
             orders_recived_confirmed_tx: orders_recived_confirmed_tx,
+            order_completed_other_tx,
         }
     }
  
@@ -410,6 +413,9 @@ impl Decision {
                                             // }
                                         }
                                         OrderStatus::Completed => {
+                                            if received_order.source_id == self.local_id {
+                                                let _ = self.order_completed_other_tx.send(received_order.clone()).await;
+                                            }
                                             if received_order.status == OrderStatus::Noorder {
                                                 local_order.status = OrderStatus::Noorder; //TRUST
                                                 println!("NOORDER State change");
@@ -598,7 +604,7 @@ impl Decision {
  
     pub async fn hall_order_assigner(& self) {
         let mut broadcast = self.local_broadcastmessage.write().await;
-        println!("Broadcast message before reassignement: {:#?}", *broadcast);
+        //println!("Broadcast message before reassignement: {:#?}", *broadcast);
         let mut hall_requests = vec![vec![false, false]; MAX_FLOORS];
         let mut states = std::collections::HashMap::new();
 
@@ -619,7 +625,7 @@ impl Decision {
                 println!("Elevator {} is dead, skipping.", id);
                 continue;
             }
-            println!("Elevator {} is alive.", id);
+            //println!("Elevator {} is alive.", id);
             let cab_requests: Vec<bool> = (1..=MAX_FLOORS) 
             .map(|floor| {
                 broadcast.orders.values().any(|orders| {
@@ -629,7 +635,7 @@ impl Decision {
                 })
             })
             .collect();
-            println!("Cab requests: {:?}", cab_requests);
+            //println!("Cab requests: {:?}", cab_requests);
         
             let behaviour = if state.door_open {
                 "doorOpen"
@@ -676,10 +682,10 @@ impl Decision {
             let hra_output: HashMap<String, Vec<Vec<bool>>> = serde_json::from_str(&hra_output_str)
                 .expect("Failed to deserialize hra_output");
         
-            for (elev_id, floors) in &hra_output {
-                println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
-            }
-            println!("hra output {:#?}", &hra_output);
+            //for (elev_id, floors) in &hra_output {
+            //    println!("Elevator ID: {}, Floors: {:?}", elev_id, floors);
+            //}
+            //println!("hra output {:#?}", &hra_output);
             // 3. update local broadcast message according to the return value of executable - hra_output
             for (new_elevator_id, orders) in hra_output.iter() {
                 for (floor_index, buttons) in orders.iter().enumerate() {
@@ -775,7 +781,7 @@ impl Decision {
 
        // broadcast.orders = new_orders;
        // println!("Hall order assigner finished.");
-      println!("my local message after reassignement: {:#?}", broadcast);
+      //println!("my local message after reassignement: {:#?}", broadcast);
  
     }
  
