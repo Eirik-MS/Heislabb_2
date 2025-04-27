@@ -337,7 +337,7 @@ impl Decision {
         {
             let mut local_msg = self.local_broadcastmessage.write().await;
             let source_id = local_msg.source_id.clone();
-            println!("received broadcast message {:#?}", recvd);
+            println!("received broadcast message {:#?} from Elevator {:#?}", recvd.orders, recvd.source_id);
           //  println!("local broadcast message {:#?}", local_msg);
             for (elev_id, received_orders) in &recvd.orders {
                 for received_order in received_orders {
@@ -478,7 +478,7 @@ impl Decision {
                     }
                 }
             }
-            println!("Updated local broadcast message {:#?}", local_msg);
+            println!("Updated local broadcast message {:#?}", local_msg.orders);
  
             for (id, state) in recvd.states { //merging
                 local_msg.states.insert(id, state);
