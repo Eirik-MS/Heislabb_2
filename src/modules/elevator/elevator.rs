@@ -264,7 +264,7 @@ impl ElevatorController {
                     
 
                 },
-                default(Duration::from_millis(100)) => {
+                default(Duration::from_millis(50)) => {
                     //println!("CBC sleep");
                 }
             }
@@ -341,7 +341,7 @@ impl ElevatorController {
                         }
                     }
                 },
-                _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                _ = tokio::time::sleep(Duration::from_millis(50)) => {
                     //println!("Tokio sleep.");
                 },
             }
