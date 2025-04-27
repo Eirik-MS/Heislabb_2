@@ -373,12 +373,13 @@ impl Decision {
                                                 else if received_order.status == OrderStatus::Confirmed { //TRUST
                                                     local_order.status = OrderStatus::Confirmed;
                                                     local_order.barrier.clear(); 
+                                                    if received_order.source_id.contains(&self.local_id) {
+                                                        let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
+                                                    }
                                                 } 
                                                 else {
                                                     local_order.barrier.clear(); 
-                                                    if *elev_id == self.local_id {
-                                                        local_order.source_id.clear();
-                                                    }
+                                                    local_order.source_id.clear();
                                                     
                                                    
                                                 }
@@ -388,6 +389,9 @@ impl Decision {
                                                 // println!("REQUESTED removing barrier {:?}", self.local_id.clone());
                                                     local_order.status = OrderStatus::Confirmed; // TRUST
                                                     local_order.barrier.clear(); 
+                                                    if received_order.source_id.contains(&self.local_id) {
+                                                        let _ = self.orders_recived_confirmed_tx.send(received_order.clone()).await;
+                                                    }
 
                                                     
                                                 } else if received_order.status == OrderStatus::Completed {
