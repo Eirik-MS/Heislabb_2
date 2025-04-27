@@ -709,7 +709,7 @@ impl Decision {
                 for (floor_index, buttons) in orders.iter().enumerate() {
                     let floor = (floor_index) as u8; 
                     for (call_type, &is_confirmed) in buttons.iter().take(2).enumerate() { //call type can only be either 0 or 1 (up, down)
-                        println!("uzise of buttons: {:?} and value: {:?}", call_type, is_confirmed);
+                        
                         if is_confirmed { //true e. i. there is an order
                             let call = call_type as u8; 
     
