@@ -146,12 +146,12 @@ pub async fn network_reciver(
                     let floor   = state.current_floor;
                     let entry = last_seen_floor.entry(id.clone()).or_insert((floor, now));
                     
-                    if dir != 0 {
+                    if dir != 0 || state.obstruction{
                         // elevator thinks it’s moving
                         if floor != entry.0 {
                             // floor advanced: reset
                             *entry = (floor, now);
-                        } else if now.duration_since(entry.1) > Duration::from_secs(10) {
+                        } else if now.duration_since(entry.1) > Duration::from_secs(15) {
                             // stuck for >10s ⇒ dead
                             alive_dead_info.update_elevator_status(id.clone(), false);
                             
