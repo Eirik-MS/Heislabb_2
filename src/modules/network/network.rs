@@ -1,11 +1,10 @@
 
 use crate::modules::common::*;
-use tokio::sync::mpsc::{Sender, Receiver};
+use tokio::sync::mpsc::Sender;
 use tokio::sync::watch;
 use std::net::{Ipv4Addr,SocketAddrV4};
 use serde_json;
 use if_addrs::get_if_addrs;
-use std::sync::{Arc, Mutex};
 use std::time::{Instant, Duration};
 use md5;
 use tokio::net::UdpSocket;

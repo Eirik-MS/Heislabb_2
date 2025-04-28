@@ -2,11 +2,8 @@ use crate::modules::common::*;
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::time::{ Instant};
-use std::process::{Command, Stdio};
-use tokio::time::{sleep, Duration};
+use std::process::Command;
 use tokio::sync::{watch, Mutex, RwLock, mpsc};
-use tokio::sync::mpsc::{Sender,Receiver};
 use driver_rust::elevio::elev as e;
 const MAX_FLOORS: usize = 4; //IMPORT FROM MAIN
 // All peers supposed to have:
@@ -379,7 +376,7 @@ impl Decision {
                                         
                                             }
                                         }
-                                        if (local_order.status == OrderStatus::Requested && received_order.status == OrderStatus::Requested) {
+                                        if local_order.status == OrderStatus::Requested && received_order.status == OrderStatus::Requested {
                                             println!("attaching barriers {:?}, {:?}, {:?}", received_order.barrier.clone(), recvd.source_id.clone(), self.local_id.clone());
                                             for id in &received_order.barrier {
                                                 local_order.barrier.insert(id.clone()); //merging
@@ -677,7 +674,7 @@ impl Decision {
 
 
         for (elev_id, received_orders) in &broadcast.orders {
-            for mut received_order in received_orders {
+            for received_order in received_orders {
                     
                 for (lid, local_orders) in new_orders.iter_mut() {
                     for local_order in local_orders.iter_mut() {
@@ -685,7 +682,7 @@ impl Decision {
                             && local_order.call == received_order.call
                         {
                             
-                            if (local_order.status == OrderStatus::Requested) {
+                            if local_order.status == OrderStatus::Requested {
                                 println!("attaching barriers in hall assigner {:?}, {:?}, {:?}", received_order.barrier.clone(), broadcast.source_id.clone(), self.local_id.clone());
                                 local_order.barrier = received_order.barrier.clone(); //maintain barrier
                             } else if local_order.status == OrderStatus::Completed{
