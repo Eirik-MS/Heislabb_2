@@ -810,17 +810,19 @@ impl Decision {
         for (elevator_id, new_orders_list) in &broadcast.orders {
             // Only process orders for the local elevator
             if *elevator_id == self.local_id {
+                let mut assinged_orders = Vec::new();
                 for new_order in new_orders_list {
                     // Only consider confirmed and requested orders
                     
                     if new_order.status == OrderStatus::Confirmed {
                         //println!("Sending new confirmed order to elevator {}: floor {}, call {:?}",elevator_id, new_order.floor, new_order.call);
                         
-                        self.elevator_assigned_orders_tx.send(new_order.clone()).await;
+                        assinged_orders.push(new_order.clone());
                     }
                 }
+                self.elevator_assigned_orders_tx.send(assinged_orders.clone()).await;
             }
-            self.elevator_assigned_orders_tx.send(assined_orders.clone()).await;
+            
         }
 
 
