@@ -284,7 +284,6 @@ impl Decision {
  
     async fn handle_recv_broadcast(&self, recvd: BroadcastMessage) {
         //println!("start handle broadcast function");
-        //TODO if i have no state and no cab orders, trust others, backup
         //1. handle elevatros states = if not dont care
         //take other elevs states for cost function
         {

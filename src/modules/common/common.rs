@@ -15,7 +15,7 @@ pub const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 pub struct ElevatorState {
     pub current_floor: u8,
     pub prev_floor: u8,
-    pub current_direction: u8,
+    pub current_direction: u8, //down - 255, stop - 0 up - 1
     pub prev_direction: u8,
     pub emergency_stop: bool,
     pub obstruction: bool,

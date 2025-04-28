@@ -30,7 +30,7 @@ pub fn generateIDs() -> Option<String>{
     //println!("Local IP: {}", ip);
     let id = md5::compute(ip);
     Some(format!("{:x}", id));
-    return Some("2".to_string());
+    return Some("1".to_string());
 }
 
 
@@ -112,7 +112,7 @@ pub async fn network_reciver(
 ) {
     println!("Started networking receiver task");
     let mut alive_dead_info = AliveDeadInfo::new();
-
+    let mut last_seen_floor: std::collections::HashMap<String, u8> = std::collections::HashMap::new(); 
     loop {
         // Make sure to await UDPlistener since it is async
         //println!("loop");
@@ -150,6 +150,37 @@ pub async fn network_reciver(
                     alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
                 }
 
+
+
+                for (elevator_id, elevator_state) in &message.states {
+                    let last_heartbeat_time = alive_dead_info.last_heartbeat.get(elevator_id);
+
+
+                    if let Some(last_time) = last_heartbeat_time {
+
+                        if elevator_state.current_direction != 0 {
+
+                            let last_floor = last_seen_floor.get(elevator_id).cloned();
+
+                            if let Some(last_floor_value) = last_floor {
+                                if elevator_state.current_floor == last_floor_value
+                                    && now.duration_since(*last_time) > timeout_duration {
+
+                                    alive_dead_info.update_elevator_status(elevator_id.clone(), false);
+                                    eprintln!("Elevator {} is stuck", elevator_id);
+                                }
+                            }
+
+
+                            last_seen_floor.insert(elevator_id.clone(), elevator_state.current_floor);
+                        }
+                    }
+
+                    alive_dead_info.last_heartbeat.insert(elevator_id.clone(), Instant::now());
+                }
+
+                
+                
                 // Send BroadcastMessage to decision
                 //println!("Sending message to the decision");
                 // network_to_decision_tx.send(message.clone()).await;
