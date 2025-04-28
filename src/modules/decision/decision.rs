@@ -75,6 +75,7 @@ impl Decision {
     // however, we still jump to confirmed without barrier (kinda obvious)
     pub async fn step(&mut self) {
         //println!("Entered Step");
+
         tokio::select! {
             //---------ELEVATOR COMMUNICATION--------------------//
             new_order = self.new_order_rx.recv() => {
@@ -159,7 +160,7 @@ impl Decision {
                 }
             },
         }
-        
+
  
         self.handle_barrier().await;
         self.hall_order_assigner().await;
@@ -232,6 +233,7 @@ impl Decision {
                                 existing_order.source_id.insert(self.local_id.clone()); //update source id
                             }
                         }
+
                     }
                 }
                 2 => { // CAB order

@@ -85,6 +85,7 @@ async fn main() -> std::io::Result<()> {
             decision.step().await;
             tokio::time::sleep(UPDATE_INTERVAL).await;
 
+
         }
     });
 
@@ -117,10 +118,9 @@ async fn main() -> std::io::Result<()> {
 
 
 
-    // Optionally await both handles or run other tasks
-
     elevator_handle.await?;
     decision_handle.await?;
+
     
     Ok(())
 }
