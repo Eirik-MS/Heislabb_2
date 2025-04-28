@@ -133,46 +133,44 @@ pub async fn network_reciver(
             alive_dead_info.update_elevator_status(id.clone(), false);
             alive_dead_info.last_heartbeat.remove(&id);
         }
-        //println!("Sending dead alive to decision: {:?}", alive_dead_info);
-        if let Err(e) = network_alive_tx.send(alive_dead_info.clone()).await {
-            eprintln!("Failed to send alive info: {}", e);
-        }
+        
 
 
         match UDPlistener(&socket).await {
             Some(message) => {
                 let id = message.source_id.clone();
                 let now = Instant::now();
+                
                 if let Some(state) = message.states.get(&id) {
                     let dir   = state.current_direction;
-                    let flr   = state.current_floor;
-                    let entry = last_seen_floor
-                        .entry(id.clone())
-                        .or_insert((flr, now));
+                    let floor   = state.current_floor;
+                    let entry = last_seen_floor.entry(id.clone()).or_insert((floor, now));
+                    
                     if dir != 0 {
                         // elevator thinks it’s moving
-                        if flr != entry.0 {
+                        if floor != entry.0 {
                             // floor advanced: reset
-                            *entry = (flr, now);
+                            *entry = (floor, now);
                         } else if now.duration_since(entry.1) > Duration::from_secs(10) {
                             // stuck for >10s ⇒ dead
                             alive_dead_info.update_elevator_status(id.clone(), false);
-                            alive_dead_info.last_heartbeat.remove(&id);
-                            // you could also remove its stuck‐entry:
-                            // last_seen_floor.remove(&eid);
+                            
+                            println!("Elevator {:?} is dead", id);
+                           
                         }
+                        println!("Elevator {:?} is moving and it is {:?}ms since last message", id,now.duration_since(entry.1));
                     } else {
-                        // elevator stopped → reset timer
-                        *entry = (flr, now);
+                        alive_dead_info.last_heartbeat.remove(&id);
+                        *entry = (floor, now);
                     }
                 }
 
                 //println!("Received message: {:#?}", message);
-                if !alive_dead_info.last_heartbeat.contains_key(&message.source_id) {
-                    alive_dead_info.update_elevator_status(message.source_id.clone(), true);
-                    alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
+                if !alive_dead_info.last_heartbeat.contains_key(&id) {
+                    alive_dead_info.update_elevator_status(id.clone(), true);
+                    alive_dead_info.last_heartbeat.insert(id.clone(), Instant::now());
                 } else {
-                    alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
+                    alive_dead_info.last_heartbeat.insert(id.clone(), Instant::now());
                 }
 
                 // Send BroadcastMessage to decision
@@ -186,6 +184,10 @@ pub async fn network_reciver(
             None => {
                 continue;
             }
+        }
+        //println!("Sending dead alive to decision: {:?}", alive_dead_info);
+        if let Err(e) = network_alive_tx.send(alive_dead_info.clone()).await {
+            eprintln!("Failed to send alive info: {}", e);
         }
     }
 }
