@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use crate::network::generateIDs; 
 
 
-pub const SYSTEM_ID: &str = "Delulu";
+pub const SYSTEM_ID: &str = "Gr28";
 pub const NUM_OF_FLOORS:u8 = 4;
 pub const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
 

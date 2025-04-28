@@ -94,12 +94,7 @@ async fn main() -> std::io::Result<()> {
         }
     });
 
-    // Setup network
-    //let udp_socket = setup_udp_socket().await.unwrap();
-    //let ipV4_addr = network::get_ip().expect("Failed to get local IP");
-    //let socket_addr = format!("{}:30000", ipV4_addr);
-    //let udp_socekt_reciver = UdpSocket::bind("0.0.0.0:30000").expect("Failed to bind socket");
-    //let udp_socket_sender = UdpSocket::bind(socket_addr).expect("Failed to bind socket");
+
 
     //let udp_socket_sender = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket");
     let udp_socket_sender = UdpSocket::bind("0.0.0.0:0").await?;
@@ -129,8 +124,7 @@ async fn main() -> std::io::Result<()> {
 
 
     // Optionally await both handles or run other tasks
-    // For example, you can await one of them or use join! macro if they need to run concurrently.
-    // Here we simply await the elevator_handle for demonstration.
+
     elevator_handle.await?;
     decision_handle.await?;
     
