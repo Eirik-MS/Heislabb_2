@@ -30,7 +30,7 @@ pub fn generateIDs() -> Option<String>{
     //println!("Local IP: {}", ip);
     let id = md5::compute(ip);
     Some(format!("{:x}", id));
-    return Some("1".to_string());
+    return Some("2".to_string());
 }
 
 
@@ -161,11 +161,10 @@ pub async fn network_reciver(
                         if elevator_state.current_direction != 0 {
                            
                             let last_floor = last_seen_floor.get(elevator_id).cloned();
-                            println!("when moving the last_floor is {:?}", last_floor);
+                            println!("when moving the last_floor is {:?}", last_seen_floor);
                             if let Some(last_floor_value) = last_floor {
                                 if elevator_state.current_floor == last_floor_value
                                     && now.duration_since(*last_time) > timeout_duration {
-
                                     alive_dead_info.update_elevator_status(elevator_id.clone(), false);
                                     eprintln!("Elevator {} is stuck", elevator_id);
                                 }
