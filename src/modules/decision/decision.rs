@@ -340,7 +340,7 @@ impl Decision {
         {
             let mut local_msg = self.local_broadcastmessage.write().await;
             let source_id = local_msg.source_id.clone();
-            println!("received broadcast message {:#?} from Elevator {:#?}", recvd.orders, recvd.source_id);
+            //println!("received broadcast message {:#?} from Elevator {:#?}", recvd.orders, recvd.source_id);
           //  println!("local broadcast message {:#?}", local_msg);
             for (elev_id, received_orders) in &recvd.orders {
                 for received_order in received_orders {
@@ -380,9 +380,7 @@ impl Decision {
                                                 else {
                                                     local_order.barrier.clear(); 
                                                     local_order.source_id.clear();
-                                                    
-                                                        println!("CAB order, Noorder, turning off ligth.");
-                                                        let _ = self.order_completed_other_tx.send(local_order.clone()).await;
+                                                    let _ = self.order_completed_other_tx.send(local_order.clone()).await;
                                                     
                                                    
                                                 }

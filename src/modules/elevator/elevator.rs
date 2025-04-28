@@ -1,3 +1,4 @@
+use std::os::linux::raw::stat;
 use std::sync::Arc;
 use std::thread::spawn;
 use tokio::time::{sleep, Duration};
@@ -208,6 +209,7 @@ impl ElevatorController {
                             self.elevator.motor_direction(e::DIRN_STOP);
                             state.prev_direction = state.current_direction;
                             state.current_direction = e::DIRN_STOP;
+                            state.door_open = true;
 
                             
                         }
@@ -357,7 +359,8 @@ impl ElevatorController {
             let mut door_should_open = false;
             let mut should_change_direction = false;
             let mut dirn = e::DIRN_STOP;
-            
+            //sleep
+            //tokio::time::sleep(Duration::from_millis(50)).await;
             {
                 let state = self.state.read().await;
                 if state.current_direction == e::DIRN_STOP && self.queue.read().await.len() > 0 {
@@ -397,15 +400,15 @@ impl ElevatorController {
 
 
             }
-
-            if should_change_direction {
-                println!("Change direction.");
-                let mut state = self.state.write().await;
-                state.prev_direction = state.current_direction;
-                state.current_direction = dirn;
-                self.elevator.motor_direction(dirn);
+            {
+                if should_change_direction && !self.state.read().await.door_open {
+                    println!("Change direction.");
+                    let mut state = self.state.write().await;
+                    state.prev_direction = state.current_direction;
+                    state.current_direction = dirn;
+                    self.elevator.motor_direction(dirn);
+                }
             }
-
             //Send state data to other modules
             let elevator_state_clone = self.state.read().await.clone(); 
             self.elevator_state_tx.send(elevator_state_clone).unwrap();
