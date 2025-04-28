@@ -267,7 +267,7 @@ impl ElevatorController {
                     
 
                 },
-                default(Duration::from_millis(50)) => {
+                default(Duration::from_millis(25)) => {
                     //println!("CBC sleep");
                 }
             }
