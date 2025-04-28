@@ -380,7 +380,9 @@ impl Decision {
                                                 else {
                                                     local_order.barrier.clear(); 
                                                     local_order.source_id.clear();
-                                                    
+                                                    if *lid == self.local_id {
+                                                        let _ = self.order_completed_other_tx.send(local_order.clone()).await;
+                                                    }
                                                    
                                                 }
                                             }
