@@ -155,13 +155,13 @@ pub async fn network_reciver(
                 for (elevator_id, elevator_state) in &message.states {
                     let last_heartbeat_time = alive_dead_info.last_heartbeat.get(elevator_id);
 
-
+                    println!("last_heartbeat_time is {:?}", last_heartbeat_time);
                     if let Some(last_time) = last_heartbeat_time {
 
                         if elevator_state.current_direction != 0 {
-
+                           
                             let last_floor = last_seen_floor.get(elevator_id).cloned();
-
+                            println!("when moving the last_floor is {:?}", last_floor);
                             if let Some(last_floor_value) = last_floor {
                                 if elevator_state.current_floor == last_floor_value
                                     && now.duration_since(*last_time) > timeout_duration {
@@ -175,7 +175,6 @@ pub async fn network_reciver(
                             last_seen_floor.insert(elevator_id.clone(), elevator_state.current_floor);
                         }
                     }
-
                     alive_dead_info.last_heartbeat.insert(elevator_id.clone(), Instant::now());
                 }
 
