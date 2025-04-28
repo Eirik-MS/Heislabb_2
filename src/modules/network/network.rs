@@ -110,6 +110,8 @@ pub async fn network_reciver(
     println!("Started networking receiver task");
     let mut alive_dead_info = AliveDeadInfo::new();
 
+    let mut last_seen_floor: std::collections::HashMap<String,(u8, Instant)> = std::collections::HashMap::new();
+
     loop {
         // Make sure to await UDPlistener since it is async
         //println!("loop");
@@ -139,6 +141,32 @@ pub async fn network_reciver(
 
         match UDPlistener(&socket).await {
             Some(message) => {
+                let id = message.source_id.clone();
+                let now = Instant::now();
+                if let Some(state) = message.states.get(&id) {
+                    let dir   = state.current_direction;
+                    let flr   = state.current_floor;
+                    let entry = last_seen_floor
+                        .entry(id.clone())
+                        .or_insert((flr, now));
+                    if dir != 0 {
+                        // elevator thinks it’s moving
+                        if flr != entry.0 {
+                            // floor advanced: reset
+                            *entry = (flr, now);
+                        } else if now.duration_since(entry.1) > Duration::from_secs(10) {
+                            // stuck for >10s ⇒ dead
+                            alive_dead_info.update_elevator_status(id.clone(), false);
+                            alive_dead_info.last_heartbeat.remove(&id);
+                            // you could also remove its stuck‐entry:
+                            // last_seen_floor.remove(&eid);
+                        }
+                    } else {
+                        // elevator stopped → reset timer
+                        *entry = (flr, now);
+                    }
+                }
+
                 //println!("Received message: {:#?}", message);
                 if !alive_dead_info.last_heartbeat.contains_key(&message.source_id) {
                     alive_dead_info.update_elevator_status(message.source_id.clone(), true);
