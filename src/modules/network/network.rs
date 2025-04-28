@@ -1,13 +1,14 @@
 
 use crate::modules::common::*;
-use tokio::sync::mpsc::{Sender, Receiver};
-use core::net;
-use std::net::{UdpSocket, Ipv4Addr,SocketAddrV4};
+use tokio::sync::mpsc::Sender;
+use tokio::sync::watch;
+use std::net::{Ipv4Addr,SocketAddrV4};
 use serde_json;
 use if_addrs::get_if_addrs;
-use std::sync::{Arc, Mutex};
 use std::time::{Instant, Duration};
 use md5;
+use tokio::net::UdpSocket;
+use std::time::SystemTime;
 
 //====GenerateIDs====//
 
@@ -25,41 +26,51 @@ pub fn get_ip() -> Option<String> {
 pub fn generateIDs() -> Option<String>{
     // If no IP is found, this will panic with a message.
     let ip = get_ip().expect("Failed to get local IP");
-    println!("Local IP: {}", ip);
+    //println!("Local IP: {}", ip);
     let id = md5::compute(ip);
-    Some(format!("{:x}", id))
+    Some(format!("{:x}", id));
+    return Some("2".to_string());
 }
+
 
 pub async fn network_sender(
     socket: UdpSocket,
-    mut decision_to_network_rx: Receiver<BroadcastMessage>,
-){
+    mut decision_to_network_rx: watch::Receiver<BroadcastMessage>,
+) {
     loop {
-        match decision_to_network_rx.recv().await {
-            Some(message) => {
-                println!("Sending message");
-                //socket.set_broadcast(true).expect("Failed to enable UDP broadcast");
-
-                let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30000);
-                let serMessage = serde_json::to_string(&message).expect("Failed to serialize message");
-
-                socket.send_to(serMessage.as_bytes(), broadcast_addr).expect("Failed to broadcast message on port");
-            }
-            None => {
-                println!("Channel closed; no message received.");
-                // Optionally, break or continue
-                break;
-            }
+        // Wait for a new value
+        if decision_to_network_rx.changed().await.is_err() {
+            println!("Channel closed; exiting.");
+            break;
         }
+
+        let mut message = decision_to_network_rx.borrow().clone();
+        //println!("Sending message: {:#?}", message);
+        message.version =  SystemTime::now()
+                           .duration_since(SystemTime::UNIX_EPOCH)
+                           .expect("Clock went backwards")
+                           .as_millis() as u64;
+
+        let broadcast_addr = SocketAddrV4::new(Ipv4Addr::BROADCAST, 30028);
+        let ser_message = serde_json::to_string(&message).expect("Failed to serialize message");
+
+
+        socket.send_to(ser_message.as_bytes(), broadcast_addr)
+            .await
+            .expect("Failed to broadcast message on port");
+
+
+        //wait a bit
+        tokio::time::sleep(Duration::from_millis(300)).await;
     }
 }
 
 //====ServerEnd====//
-pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
+pub async fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
     //println!("Listening for UDP broadcast messages on port 30000");
     let mut buffer = [0; 65535];
 
-    let(size, source) = socket.recv_from(&mut buffer).expect("Failed to receive data");
+    let (size, source) = socket.recv_from(&mut buffer).await.expect("Failed to receive data");
     
     let message: BroadcastMessage = match serde_json::from_slice(&buffer[..size]){
         Ok(msg) => msg,
@@ -68,11 +79,22 @@ pub fn UDPlistener(socket: &UdpSocket) -> Option<BroadcastMessage>{
             return None;
         }
     };
+    let system_id = generateIDs().expect("Failed to generate ID");
 
-    if message.source_id != SYSTEM_ID {
-        println!("Received message from unexpectrd peer: {}", message.source_id);
+    if message.source_id == system_id {
+        //skip when equal (not to receive my own messages)
+        // println!("Received message from unexpectrd peer: {}", message.source_id);
+        // println!("While my ID is: {}", system_id);
         return None;
     }
+
+    // log one‐way latency (requires synced clocks!)
+    let now_ms = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_millis() as u64;
+    let rtt = now_ms.saturating_sub(message.version);
+    //println!( "[UDPlistener] msg.version={}  →  received after {} ms",message.version, rtt);
 
     Some(message)
 }
@@ -83,53 +105,88 @@ pub async fn network_reciver(
     network_to_decision_tx: Sender<BroadcastMessage>,
     network_alive_tx: Sender<AliveDeadInfo>,
     timeout_duration: Duration,
-){
+) {
     println!("Started networking receiver task");
     let mut alive_dead_info = AliveDeadInfo::new();
 
+    let mut last_seen_floor: std::collections::HashMap<String,(u8, Instant)> = std::collections::HashMap::new();
+
     loop {
-        match UDPlistener(&socket) {
+        // Make sure to await UDPlistener since it is async
+        //println!("loop");
+
+        // Collect the ids that have expired
+        let now = Instant::now();
+        let expired_ids: Vec<_> = alive_dead_info.last_heartbeat
+            .iter()
+            .filter_map(|(id, last_heartbeat)| {
+                if now.duration_since(*last_heartbeat) > timeout_duration {
+                    Some(id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for id in expired_ids {
+            alive_dead_info.update_elevator_status(id.clone(), false);
+            alive_dead_info.last_heartbeat.remove(&id);
+        }
+        
+
+
+        match UDPlistener(&socket).await {
             Some(message) => {
-                println!("Received message: {:#?}", message);
-                if !alive_dead_info.last_heartbeat.contains_key(&message.source_id) {
-                    alive_dead_info.update_elevator_status(message.source_id.clone(), true);
-                    alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
-                } 
+                let id = message.source_id.clone();
+                let now = Instant::now();
                 
-                else {
-                    alive_dead_info.last_heartbeat.insert(message.source_id.clone(), Instant::now());
-                }
-                //Send BroadcastMessage to decision
-                network_to_decision_tx.send(message.clone()).await;
-
-                // Collect the ids that have expired
-                let now = Instant::now();                
-                let expired_ids: Vec<_> = alive_dead_info.last_heartbeat
-                .iter()
-                .filter_map(|(id, last_heartbeat)| {
-                    if now.duration_since(*last_heartbeat) > timeout_duration {
-                        Some(id.clone())
+                if let Some(state) = message.states.get(&id) {
+                    let dir   = state.current_direction;
+                    let floor   = state.current_floor;
+                    let entry = last_seen_floor.entry(id.clone()).or_insert((floor, now));
+                    
+                    if dir != 0 || state.obstruction{
+                        // elevator thinks it’s moving
+                        if floor != entry.0 {
+                            // floor advanced: reset
+                            *entry = (floor, now);
+                        } else if now.duration_since(entry.1) > Duration::from_secs(15) {
+                            // stuck for >10s ⇒ dead
+                            alive_dead_info.update_elevator_status(id.clone(), false);
+                            
+                            println!("Elevator {:?} is dead", id);
+                           
+                        }
+                        println!("Elevator {:?} is moving and it is {:?}ms since last message", id,now.duration_since(entry.1));
                     } else {
-                        None
+                        alive_dead_info.last_heartbeat.remove(&id);
+                        *entry = (floor, now);
                     }
-                })
-                .collect();
-
-                for id in expired_ids {
-                    alive_dead_info.update_elevator_status(id.clone(), false);
-                    alive_dead_info.last_heartbeat.remove(&id);
                 }
 
-                network_alive_tx.send(alive_dead_info.clone()).await;
+                //println!("Received message: {:#?}", message);
+                if !alive_dead_info.last_heartbeat.contains_key(&id) {
+                    alive_dead_info.update_elevator_status(id.clone(), true);
+                    alive_dead_info.last_heartbeat.insert(id.clone(), Instant::now());
+                } else {
+                    alive_dead_info.last_heartbeat.insert(id.clone(), Instant::now());
+                }
+
+                // Send BroadcastMessage to decision
+                //println!("Sending message to the decision");
+                // network_to_decision_tx.send(message.clone()).await;
+                if let Err(e) = network_to_decision_tx.send(message).await {
+                    eprintln!("Send failed: {:?}", e);
+                }
+               // println!("Progressed");
             }
             None => {
                 continue;
             }
         }
-
+        //println!("Sending dead alive to decision: {:?}", alive_dead_info);
+        if let Err(e) = network_alive_tx.send(alive_dead_info.clone()).await {
+            eprintln!("Failed to send alive info: {}", e);
+        }
     }
 }
-            
-
-
-

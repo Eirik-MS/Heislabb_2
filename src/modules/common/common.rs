@@ -2,12 +2,13 @@ use serde::{Serialize, Deserialize};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::collections::HashSet;
+use crate::network::generateIDs; 
 
 
-
-pub const SYSTEM_ID: &str = "Delulu";
+pub const SYSTEM_ID: &str = "Gr28";
 pub const NUM_OF_FLOORS:u8 = 4;
 pub const UPDATE_INTERVAL:Duration = Duration::from_millis(5); //ms
+
 
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] 
@@ -27,6 +28,7 @@ pub struct Order {
     pub floor: u8, //1,2,3,4
     pub status: OrderStatus,
     pub barrier: HashSet<String>, //barrier for requested->confirmed & confirmed->norder
+    pub source_id: HashSet<String>, //elevator ID
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -48,11 +50,13 @@ pub struct BroadcastMessage {
 
 impl BroadcastMessage {
     pub fn new(version: u64) -> Self {
+        let source_id = generateIDs().expect("Failed to generate ID");
+        
         BroadcastMessage {
-            source_id: String::from(SYSTEM_ID),
-            version : version,
+            source_id,
+            version,
             orders: HashMap::new(),
-            states: std::collections::HashMap::new(),
+            states: HashMap::new(),
         }
     }
 }
@@ -98,5 +102,12 @@ impl AliveDeadInfo {
 
     pub fn update_elevator_status(&mut self, id: String, is_alive: bool) {
         self.elevators.insert(id.clone(), ElevatorStatus { id, is_alive });
+    }
+
+    pub fn to_id_bool_map(&self) -> HashMap<String, bool> {
+        self.elevators
+            .iter()
+            .map(|(id, status)| (id.clone(), status.is_alive))
+            .collect()
     }
 }
