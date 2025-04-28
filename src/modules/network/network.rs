@@ -25,10 +25,10 @@ pub fn get_ip() -> Option<String> {
 
 pub fn generateIDs() -> Option<String>{
     // If no IP is found, this will panic with a message.
-    let ip = get_ip().expect("Failed to get local IP");
+    //let ip = get_ip().expect("Failed to get local IP");
     //println!("Local IP: {}", ip);
-    let id = md5::compute(ip);
-    Some(format!("{:x}", id));
+    //let id = md5::compute(ip);
+    //Some(format!("{:x}", id));
     return Some("2".to_string());
 }
 
